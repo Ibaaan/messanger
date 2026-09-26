@@ -66,7 +66,7 @@ dotnet run --project tests/Messanger.IntegrationTests
 ```
 
 The integration executable tests user/profile insertion, normalized username uniqueness, active membership filtering,
-message pagination, and refresh-family revocation. Its data changes run inside a rolled-back transaction.
+message pagination, and refresh-family revocation. Each named scenario uses its own DI scope and rolled-back transaction, even on failure. `Program.cs` lists the checks; repository-specific test files contain setup, actions, and assertions. The runner prints a PASS/FAIL line for every scenario and exits with a nonzero code if any fail.
 
 Add a schema migration with:
 
