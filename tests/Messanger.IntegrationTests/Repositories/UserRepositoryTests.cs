@@ -1,7 +1,9 @@
+using Messanger.Domain;
+using Messanger.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
-namespace Messanger.IntegrationTests;
+namespace Messanger.IntegrationTests.Repositories;
 
 internal static class UserRepositoryTests
 {
@@ -11,10 +13,10 @@ internal static class UserRepositoryTests
         database.Context.ChangeTracker.Clear();
 
         var storedUser = await database.Users.GetByUsernameAsync(user.Username.ToUpperInvariant());
-        var profileExists = await database.Context.Set<Messanger.Domain.UserProfile>()
+        var profileExists = await database.Context.Set<UserProfile>()
             .AnyAsync(profile => profile.UserId == user.Id);
 
-        TestAssert.Equal<long?>(user.Id, storedUser?.Id, "Username lookup should ignore case.");
+        TestAssert.Equal(user.Id, storedUser?.Id, "Username lookup should ignore case.");
         TestAssert.True(profileExists, "The new profile should reference the persisted user.");
     }
 
@@ -28,10 +30,10 @@ internal static class UserRepositoryTests
         }
         catch (DbUpdateException exception) when
             (exception.InnerException is PostgresException
-            {
-                SqlState: PostgresErrorCodes.UniqueViolation,
-                ConstraintName: "IX_users_normalized_username"
-            })
+             {
+                 SqlState: PostgresErrorCodes.UniqueViolation,
+                 ConstraintName: "IX_users_normalized_username"
+             })
         {
             return;
         }

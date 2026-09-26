@@ -1,10 +1,10 @@
-using Messanger.Application;
+using Messanger.Application.Persistence;
 using Messanger.Domain;
-using Messanger.Infrastructure;
+using Messanger.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Messanger.IntegrationTests;
+namespace Messanger.IntegrationTests.Support;
 
 internal sealed class TestDatabase : IAsyncDisposable
 {
@@ -21,7 +21,21 @@ internal sealed class TestDatabase : IAsyncDisposable
     public IUserRepository Users => scope.ServiceProvider.GetRequiredService<IUserRepository>();
     public IChatRepository Chats => scope.ServiceProvider.GetRequiredService<IChatRepository>();
     public IMessageRepository Messages => scope.ServiceProvider.GetRequiredService<IMessageRepository>();
-    public IRefreshTokenFamilyRepository Tokens => scope.ServiceProvider.GetRequiredService<IRefreshTokenFamilyRepository>();
+
+    public IRefreshTokenFamilyRepository Tokens =>
+        scope.ServiceProvider.GetRequiredService<IRefreshTokenFamilyRepository>();
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await transaction.RollbackAsync();
+        }
+        finally
+        {
+            await scope.DisposeAsync();
+        }
+    }
 
     public static async Task<TestDatabase> CreateAsync(IServiceProvider provider)
     {
@@ -39,8 +53,10 @@ internal sealed class TestDatabase : IAsyncDisposable
         }
     }
 
-    public Task<int> SaveChangesAsync() =>
-        scope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync();
+    public Task<int> SaveChangesAsync()
+    {
+        return scope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync();
+    }
 
     public async Task<User> CreateUserAsync(string? username = null)
     {
@@ -77,17 +93,5 @@ internal sealed class TestDatabase : IAsyncDisposable
         Messages.Add(message);
         await SaveChangesAsync();
         return message;
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        try
-        {
-            await transaction.RollbackAsync();
-        }
-        finally
-        {
-            await scope.DisposeAsync();
-        }
     }
 }

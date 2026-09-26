@@ -1,4 +1,6 @@
-using Messanger.Application;
+using Messanger.Application.Persistence;
+using Messanger.Infrastructure.Persistence;
+using Messanger.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;

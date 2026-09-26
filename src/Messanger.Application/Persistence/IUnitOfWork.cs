@@ -1,4 +1,4 @@
-namespace Messanger.Application;
+namespace Messanger.Application.Persistence;
 
 // Changes are tracked in one scoped unit of work; SaveChangesAsync commits them atomically.
 public interface IUnitOfWork

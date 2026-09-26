@@ -1,9 +1,8 @@
-using Messanger.Infrastructure.Persistence;
-using Messanger.Application;
+using Messanger.Application.Persistence;
 using Messanger.Domain;
 using Microsoft.EntityFrameworkCore;
 
-namespace Messanger.Infrastructure;
+namespace Messanger.Infrastructure.Persistence;
 
 public sealed class MessangerDbContext(DbContextOptions<MessangerDbContext> options) : DbContext(options), IUnitOfWork
 {

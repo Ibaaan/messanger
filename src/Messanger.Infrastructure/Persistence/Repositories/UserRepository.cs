@@ -1,8 +1,8 @@
-using Messanger.Application;
+using Messanger.Application.Persistence;
 using Messanger.Domain;
 using Microsoft.EntityFrameworkCore;
 
-namespace Messanger.Infrastructure;
+namespace Messanger.Infrastructure.Persistence.Repositories;
 
 internal sealed class UserRepository(MessangerDbContext db) : IUserRepository
 {

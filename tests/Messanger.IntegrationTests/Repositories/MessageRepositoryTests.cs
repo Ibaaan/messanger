@@ -1,4 +1,6 @@
-namespace Messanger.IntegrationTests;
+using Messanger.IntegrationTests.Support;
+
+namespace Messanger.IntegrationTests.Repositories;
 
 internal static class MessageRepositoryTests
 {
@@ -28,7 +30,7 @@ internal static class MessageRepositoryTests
         var first = await database.CreateMessageAsync(chat, user, "First");
         var second = await database.CreateMessageAsync(chat, user, "Second");
 
-        var history = await database.Messages.GetHistoryAsync(chat.Id, beforeId: second.Id);
+        var history = await database.Messages.GetHistoryAsync(chat.Id, second.Id);
 
         TestAssert.Equal(1, history.Count, "Only messages older than the cursor should be returned.");
         TestAssert.Equal(first.Id, history[0].Id, "The cursor message itself should be excluded.");

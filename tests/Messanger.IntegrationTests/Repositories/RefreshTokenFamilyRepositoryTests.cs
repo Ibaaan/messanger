@@ -1,6 +1,7 @@
 using Messanger.Domain;
+using Messanger.IntegrationTests.Support;
 
-namespace Messanger.IntegrationTests;
+namespace Messanger.IntegrationTests.Repositories;
 
 internal static class RefreshTokenFamilyRepositoryTests
 {

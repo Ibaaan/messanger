@@ -1,5 +1,6 @@
 using Messanger.Infrastructure;
-using Messanger.IntegrationTests;
+using Messanger.IntegrationTests.Repositories;
+using Messanger.IntegrationTests.Support;
 using Microsoft.Extensions.DependencyInjection;
 
 var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Postgres")

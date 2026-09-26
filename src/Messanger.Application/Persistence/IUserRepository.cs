@@ -1,6 +1,6 @@
 using Messanger.Domain;
 
-namespace Messanger.Application;
+namespace Messanger.Application.Persistence;
 
 public interface IUserRepository
 {

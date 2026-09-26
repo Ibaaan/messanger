@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
-namespace Messanger.Infrastructure;
+namespace Messanger.Infrastructure.Persistence;
 
 public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<MessangerDbContext>
 {

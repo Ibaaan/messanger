@@ -1,4 +1,4 @@
-namespace Messanger.IntegrationTests;
+namespace Messanger.IntegrationTests.Support;
 
 internal static class TestAssert
 {

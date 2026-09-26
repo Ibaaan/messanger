@@ -1,4 +1,6 @@
-namespace Messanger.IntegrationTests;
+using Messanger.IntegrationTests.Support;
+
+namespace Messanger.IntegrationTests.Repositories;
 
 internal static class ChatRepositoryTests
 {
