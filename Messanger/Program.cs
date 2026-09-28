@@ -1,24 +1,42 @@
-using Messanger.Infrastructure.Persistence;
+using Messanger.Authentication;
+using Messanger.Http;
 using Messanger.Infrastructure;
-using Microsoft.Extensions.DependencyInjection;
+using Messanger.Infrastructure.Authentication;
+using Microsoft.AspNetCore.Http.Json;
 
-var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Postgres");
-if (string.IsNullOrWhiteSpace(connectionString))
+namespace Messanger;
+
+public sealed class Program
 {
-    Console.Error.WriteLine("Set ConnectionStrings__Postgres. See README.md for local setup.");
-    return 1;
-}
+    public static async Task Main(string[] args)
+    {
+        var builder = WebApplication.CreateBuilder(args);
+        var connectionString = builder.Configuration.GetConnectionString("Postgres")
+                               ?? throw new InvalidOperationException(
+                                   "ConnectionStrings:Postgres is required. See README.md.");
 
-var services = new ServiceCollection();
-services.AddPostgresRepositories(connectionString);
-await using var provider = services.BuildServiceProvider();
-await using var scope = provider.CreateAsyncScope();
-var db = scope.ServiceProvider.GetRequiredService<MessangerDbContext>();
-if (!await db.Database.CanConnectAsync())
-{
-    Console.Error.WriteLine("Could not connect to PostgreSQL.");
-    return 1;
-}
+        builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 16 * 1024);
+        builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
+        builder.Services.Configure<JsonOptions>(options => options.SerializerOptions.MaxDepth = 8);
+        builder.Services.AddPostgresRepositories(connectionString);
+        builder.Services.AddAccessAuthentication(builder.Configuration);
+        builder.Services.AddHttpSecurity(builder.Configuration, builder.Environment.IsDevelopment());
+        builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+        builder.Services.AddProblemDetails();
 
-Console.WriteLine("Connected to PostgreSQL.");
-return 0;
+        var app = builder.Build();
+        // Fail startup on an invalid/missing signing key rather than the first login request.
+        app.Services.GetRequiredService<JwtSigningKey>();
+        app.UseExceptionHandler();
+        app.UseStatusCodePages(async status =>
+        {
+            var (code, message) = ApiError.ForStatus(status.HttpContext.Response.StatusCode);
+            await ApiError.WriteAsync(status.HttpContext, status.HttpContext.Response.StatusCode, code, message);
+        });
+        app.UseCoreHttpSecurity(app.Environment.IsDevelopment());
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapAuthenticationEndpoints();
+        await app.RunAsync();
+    }
+}
