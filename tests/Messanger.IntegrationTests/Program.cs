@@ -1,10 +1,12 @@
 using Messanger.Infrastructure;
+using Messanger.IntegrationTests.Api;
 using Messanger.IntegrationTests.Repositories;
 using Messanger.IntegrationTests.Support;
 using Microsoft.Extensions.DependencyInjection;
 
 var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Postgres")
-    ?? throw new InvalidOperationException("Set ConnectionStrings__Postgres to a migrated test database.");
+                       ?? throw new InvalidOperationException(
+                           "Set ConnectionStrings__Postgres to a migrated test database.");
 
 var services = new ServiceCollection().AddPostgresRepositories(connectionString);
 await using var provider = services.BuildServiceProvider();
@@ -15,14 +17,16 @@ await using var provider = services.BuildServiceProvider();
     (nameof(UserRepositoryTests.DuplicateUsernameIsRejected), UserRepositoryTests.DuplicateUsernameIsRejected),
     (nameof(ChatRepositoryTests.ActiveMemberCanFindChat), ChatRepositoryTests.ActiveMemberCanFindChat),
     (nameof(ChatRepositoryTests.DepartedMemberCannotFindChat), ChatRepositoryTests.DepartedMemberCannotFindChat),
-    (nameof(MessageRepositoryTests.HistoryReturnsNewestMessagesFirst), MessageRepositoryTests.HistoryReturnsNewestMessagesFirst),
-    (nameof(MessageRepositoryTests.HistoryCursorExcludesNewerMessages), MessageRepositoryTests.HistoryCursorExcludesNewerMessages),
-    (nameof(RefreshTokenFamilyRepositoryTests.RevokeFamilyPersistsRevocation), RefreshTokenFamilyRepositoryTests.RevokeFamilyPersistsRevocation)
+    (nameof(MessageRepositoryTests.HistoryReturnsNewestMessagesFirst),
+        MessageRepositoryTests.HistoryReturnsNewestMessagesFirst),
+    (nameof(MessageRepositoryTests.HistoryCursorExcludesNewerMessages),
+        MessageRepositoryTests.HistoryCursorExcludesNewerMessages),
+    (nameof(RefreshTokenFamilyRepositoryTests.RevokeFamilyPersistsRevocation),
+        RefreshTokenFamilyRepositoryTests.RevokeFamilyPersistsRevocation)
 ];
 
 var failures = 0;
 foreach (var (name, run) in tests)
-{
     try
     {
         // Each scenario gets its own scope and transaction, including cleanup on failure.
@@ -30,6 +34,7 @@ foreach (var (name, run) in tests)
         {
             await run(database);
         }
+
         Console.WriteLine($"PASS {name}");
     }
     catch (Exception exception)
@@ -37,7 +42,50 @@ foreach (var (name, run) in tests)
         failures++;
         Console.Error.WriteLine($"FAIL {name}: {exception}");
     }
+
+(string Name, Func<ApiTestHost, Task> Run)[] apiTests =
+[
+    (nameof(RegistrationApiTests.CreatesHashedUserAndDefaultProfile),
+        RegistrationApiTests.CreatesHashedUserAndDefaultProfile),
+    (nameof(RegistrationApiTests.DuplicateNamesAreCaseInsensitive),
+        RegistrationApiTests.DuplicateNamesAreCaseInsensitive),
+    (nameof(RegistrationApiTests.ConcurrentRegistrationsCannotDuplicateAccounts),
+        RegistrationApiTests.ConcurrentRegistrationsCannotDuplicateAccounts),
+    (nameof(RegistrationApiTests.RejectsInvalidCredentialsWithoutCreatingAccounts),
+        RegistrationApiTests.RejectsInvalidCredentialsWithoutCreatingAccounts),
+    (nameof(LoginApiTests.AccessTokenAuthenticatesOnlyItsOwner), LoginApiTests.AccessTokenAuthenticatesOnlyItsOwner),
+    (nameof(LoginApiTests.InvalidAndInactiveAccountsReturnGenericErrors),
+        LoginApiTests.InvalidAndInactiveAccountsReturnGenericErrors),
+    (nameof(LoginApiTests.SuspendedUserCannotUsePreviouslyIssuedToken),
+        LoginApiTests.SuspendedUserCannotUsePreviouslyIssuedToken),
+    (nameof(AccessTokenApiTests.MissingAndMalformedTokensAreRejected),
+        AccessTokenApiTests.MissingAndMalformedTokensAreRejected),
+    (nameof(AccessTokenApiTests.InvalidTokenClaimsAndSignaturesAreRejected),
+        AccessTokenApiTests.InvalidTokenClaimsAndSignaturesAreRejected),
+    (nameof(HttpPolicyApiTests.BrowserOriginMustMatchAllowlistExactly),
+        HttpPolicyApiTests.BrowserOriginMustMatchAllowlistExactly),
+    (nameof(HttpPolicyApiTests.ProductionRequiresHttps), HttpPolicyApiTests.ProductionRequiresHttps),
+    (nameof(HttpPolicyApiTests.MalformedAndOversizedBodiesUseErrorEnvelope),
+        HttpPolicyApiTests.MalformedAndOversizedBodiesUseErrorEnvelope)
+];
+
+// HTTP scenarios use their own generated schema; disposing the host removes all their data.
+await using (var host = await ApiTestHost.CreateAsync(connectionString))
+{
+    foreach (var (name, run) in apiTests)
+        try
+        {
+            await run(host);
+            Console.WriteLine($"PASS {name}");
+        }
+        catch (Exception exception)
+        {
+            failures++;
+            Console.Error.WriteLine($"FAIL {name}: {exception}");
+        }
 }
 
-Console.WriteLine($"{tests.Length - failures}/{tests.Length} integration checks passed. Test transactions rolled back.");
+var total = tests.Length + apiTests.Length;
+Console.WriteLine(
+    $"{total - failures}/{total} integration checks passed. Repository transactions rolled back; API test schema removed.");
 return failures == 0 ? 0 : 1;

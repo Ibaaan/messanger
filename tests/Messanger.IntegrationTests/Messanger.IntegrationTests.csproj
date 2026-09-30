@@ -7,5 +7,7 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="../../src/Messanger.Infrastructure/Messanger.Infrastructure.csproj"/>
+        <ProjectReference Include="../../Messanger/Messanger.csproj"/>
+        <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14"/>
     </ItemGroup>
 </Project>

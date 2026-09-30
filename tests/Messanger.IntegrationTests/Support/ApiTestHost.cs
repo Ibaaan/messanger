@@ -1,0 +1,167 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Security.Cryptography;
+using Messanger.Application;
+using Messanger.Application.Authentication;
+using Messanger.Http;
+using Messanger.Infrastructure.Authentication;
+using Messanger.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Npgsql;
+
+namespace Messanger.IntegrationTests.Support;
+
+internal sealed class ApiTestHost : WebApplicationFactory<Program>
+{
+    public const string Issuer = "https://messanger.test";
+    public const string Audience = "messanger-tests";
+    public const string AllowedOrigin = "https://client.example";
+    public const string TestPassword = "a test passphrase 123";
+    private readonly string adminConnectionString;
+    private readonly string connectionString;
+    private readonly string environment;
+    private readonly string keyDirectory;
+    private readonly string schema;
+
+    private ApiTestHost(string adminConnectionString, string environment)
+    {
+        this.adminConnectionString = adminConnectionString;
+        this.environment = environment;
+        schema = "api_tests_" + Guid.NewGuid().ToString("N");
+        connectionString = new NpgsqlConnectionStringBuilder(adminConnectionString) { SearchPath = schema }
+            .ConnectionString;
+        keyDirectory = Directory.CreateTempSubdirectory("messanger-api-tests-").FullName;
+        File.WriteAllText(Path.Combine(keyDirectory, "signing.pem"), SigningKey.ExportPkcs8PrivateKeyPem());
+    }
+
+    public RSA SigningKey { get; } = RSA.Create(2048);
+    public HttpClient Client { get; private set; } = null!;
+
+    public static async Task<ApiTestHost> CreateAsync(string connectionString, string environment = "Development")
+    {
+        var host = new ApiTestHost(connectionString, environment);
+        try
+        {
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand($"CREATE SCHEMA {host.schema}", connection);
+            await command.ExecuteNonQueryAsync();
+            await using var context = new MessangerDbContext(new DbContextOptionsBuilder<MessangerDbContext>()
+                .UseNpgsql(host.connectionString).Options);
+            await context.Database.MigrateAsync();
+            host.Client = host.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                BaseAddress = new Uri("https://localhost"),
+                AllowAutoRedirect = false
+            });
+            return host;
+        }
+        catch
+        {
+            await host.DisposeAsync();
+            throw;
+        }
+    }
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment(environment);
+        builder.ConfigureLogging(logging => logging.ClearProviders());
+        builder.ConfigureServices(services =>
+        {
+            // All request scopes use the isolated schema, never the caller's application tables.
+            services.RemoveAll<NpgsqlDataSource>();
+            services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(connectionString));
+            services.PostConfigure<JwtOptions>(options =>
+            {
+                options.Issuer = Issuer;
+                options.Audience = Audience;
+                options.PrivateKeyPath = Path.Combine(keyDirectory, "signing.pem");
+            });
+            services.PostConfigure<HttpSecurityOptions>(options => options.AllowedOrigins = [AllowedOrigin]);
+        });
+    }
+
+    public Task<ApiTestHost> CreateProductionHostAsync()
+    {
+        return CreateAsync(adminConnectionString, "Production");
+    }
+
+    public async Task<UserResponse> RegisterAsync(string? username = null)
+    {
+        using var response = await Client.PostAsJsonAsync("/registration", new
+        {
+            username = username ?? NewUsername(),
+            password = TestPassword
+        });
+        TestAssert.Equal(HttpStatusCode.Created, response.StatusCode, "Registration should succeed.");
+        return (await response.Content.ReadFromJsonAsync<UserResponse>())!;
+    }
+
+    public async Task<LoginResponse> LoginAsync(UserResponse user)
+    {
+        using var response =
+            await Client.PostAsJsonAsync("/auth/login", new { username = user.Username, password = TestPassword });
+        TestAssert.Equal(HttpStatusCode.OK, response.StatusCode, "Login should succeed.");
+        return (await response.Content.ReadFromJsonAsync<LoginResponse>())!;
+    }
+
+    public Task<HttpResponseMessage> GetCurrentUserAsync(string token)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/users/me");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return SendAsync(request);
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request)
+    {
+        using (request)
+        {
+            return await Client.SendAsync(request);
+        }
+    }
+
+    public async Task SetStatusAsync(long userId, string status)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<MessangerDbContext>();
+        var user = await context.Users.SingleAsync(user => user.Id == userId);
+        user.AccountStatus = status;
+        await context.SaveChangesAsync();
+    }
+
+    public static string NewUsername()
+    {
+        return "api_" + Guid.NewGuid().ToString("N")[..12];
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await base.DisposeAsync();
+        }
+        finally
+        {
+            try
+            {
+                await using var connection = new NpgsqlConnection(adminConnectionString);
+                await connection.OpenAsync();
+                // The name is generated above from a fixed prefix and GUID, never from user input.
+                await using var command = new NpgsqlCommand($"DROP SCHEMA IF EXISTS {schema} CASCADE", connection);
+                await command.ExecuteNonQueryAsync();
+            }
+            finally
+            {
+                SigningKey.Dispose();
+                Directory.Delete(keyDirectory, true);
+            }
+        }
+    }
+}
