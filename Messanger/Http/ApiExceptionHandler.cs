@@ -12,6 +12,8 @@ internal sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) :
     {
         var error = exception switch
         {
+            UseCaseException { Code: "forbidden" } forbidden => (403, forbidden.Code, forbidden.Message),
+            UseCaseException { Code: "not_found" } missing => (404, missing.Code, missing.Message),
             UseCaseException { Code: "validation_failed" } validation => (422, validation.Code, validation.Message),
             UseCaseException { Code: "invalid_credentials" } credentials =>
                 (401, credentials.Code, credentials.Message),

@@ -112,6 +112,14 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
         return (await response.Content.ReadFromJsonAsync<LoginResponse>())!;
     }
 
+    public Task<HttpResponseMessage> SendAsAsync(HttpMethod method, string path, string token, object? body = null)
+    {
+        var request = new HttpRequestMessage(method, path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (body is not null) request.Content = JsonContent.Create(body);
+        return SendAsync(request);
+    }
+
     public Task<HttpResponseMessage> GetCurrentUserAsync(string token)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, "/api/users/me");

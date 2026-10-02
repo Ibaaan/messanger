@@ -22,8 +22,8 @@ internal sealed class MessageRepository(MessangerDbContext db) : IMessageReposit
             .OrderByDescending(x => x.Id).Take(limit).ToListAsync(cancellationToken);
     }
 
-    private IQueryable<MessageResponse> Responses =>
-        from message in db.Messages.AsNoTracking()
+    private IQueryable<MessageResponse> Project(IQueryable<Message> query) =>
+        from message in query
         join user in db.Users on message.SenderId equals user.Id
         join profile in db.Set<UserProfile>() on user.Id equals profile.UserId
         select new MessageResponse(message.Id, message.ChatId, user.Id, user.Username,
@@ -33,8 +33,8 @@ internal sealed class MessageRepository(MessangerDbContext db) : IMessageReposit
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 50);
-        return await Responses.Where(message => message.ChatId == chatId && (beforeId == null || message.Id < beforeId))
-            .OrderByDescending(message => message.Id).Take(limit).ToListAsync(cancellationToken);
+        return await Project(db.Messages.AsNoTracking().Where(message => message.ChatId == chatId && (beforeId == null || message.Id < beforeId))
+            .OrderByDescending(message => message.Id).Take(limit)).ToListAsync(cancellationToken);
     }
 
     public async Task<MessageResponse> SaveTextAsync(long chatId, long senderId, string text, long? replyToMessageId, CancellationToken cancellationToken = default)
@@ -52,7 +52,7 @@ internal sealed class MessageRepository(MessangerDbContext db) : IMessageReposit
         var message = new Message { ChatId = chatId, SenderId = senderId, Text = text, ReplyToMessageId = replyToMessageId };
         db.Messages.Add(message);
         await db.SaveChangesAsync(cancellationToken);
-        var response = await Responses.SingleAsync(item => item.Id == message.Id, cancellationToken);
+        var response = await Project(db.Messages.AsNoTracking().Where(item => item.Id == message.Id)).SingleAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return response;
     }

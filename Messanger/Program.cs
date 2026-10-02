@@ -1,4 +1,7 @@
 using Messanger.Authentication;
+using Messanger.Chats;
+using Messanger.Application.Chats;
+using Messanger.Application.Messages;
 using Messanger.Http;
 using Messanger.Infrastructure;
 using Messanger.Infrastructure.Authentication;
@@ -19,6 +22,9 @@ public sealed class Program
         builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
         builder.Services.Configure<JsonOptions>(options => options.SerializerOptions.MaxDepth = 8);
         builder.Services.AddPostgresRepositories(connectionString);
+        builder.Services.AddScoped<ChatAccessService>();
+        builder.Services.AddScoped<ChatService>();
+        builder.Services.AddScoped<MessageService>();
         builder.Services.AddAccessAuthentication(builder.Configuration);
         builder.Services.AddHttpSecurity(builder.Configuration, builder.Environment.IsDevelopment());
         builder.Services.AddExceptionHandler<ApiExceptionHandler>();
@@ -37,6 +43,7 @@ public sealed class Program
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapAuthenticationEndpoints();
+        app.MapChatEndpoints();
         await app.RunAsync();
     }
 }
