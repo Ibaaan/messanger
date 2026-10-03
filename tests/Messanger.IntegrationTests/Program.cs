@@ -45,6 +45,12 @@ foreach (var (name, run) in tests)
 
 (string Name, Func<ApiTestHost, Task> Run)[] apiTests =
 [
+    (nameof(ChatRealtimeTests.MembersReceiveMessagesAfterPersistence), ChatRealtimeTests.MembersReceiveMessagesAfterPersistence),
+    (nameof(ChatRealtimeTests.OutsidersCannotJoinOrSend), ChatRealtimeTests.OutsidersCannotJoinOrSend),
+    (nameof(ChatRealtimeTests.DepartedSubscribersLoseDeliveryAndSendAccess), ChatRealtimeTests.DepartedSubscribersLoseDeliveryAndSendAccess),
+    (nameof(ChatRealtimeTests.ReconnectedMemberCanRecoverMissedHistory), ChatRealtimeTests.ReconnectedMemberCanRecoverMissedHistory),
+    (nameof(ChatRealtimeTests.NewChatNotifiesItsMembers), ChatRealtimeTests.NewChatNotifiesItsMembers),
+    (nameof(ChatRealtimeTests.HubNegotiationRequiresAuthentication), ChatRealtimeTests.HubNegotiationRequiresAuthentication),
     (nameof(ChatApiTests.SearchExcludesCallerAndInactiveUsers), ChatApiTests.SearchExcludesCallerAndInactiveUsers),
     (nameof(ChatApiTests.GroupCreationAddsOwnerAndUniqueMembers), ChatApiTests.GroupCreationAddsOwnerAndUniqueMembers),
     (nameof(ChatApiTests.InvalidParticipantsDoNotLeavePartialChats), ChatApiTests.InvalidParticipantsDoNotLeavePartialChats),

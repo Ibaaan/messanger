@@ -1,5 +1,6 @@
 using Messanger.Authentication;
 using Messanger.Chats;
+using Messanger.Realtime;
 using Messanger.Application.Chats;
 using Messanger.Application.Messages;
 using Messanger.Http;
@@ -25,6 +26,7 @@ public sealed class Program
         builder.Services.AddScoped<ChatAccessService>();
         builder.Services.AddScoped<ChatService>();
         builder.Services.AddScoped<MessageService>();
+        builder.Services.AddChatRealtime();
         builder.Services.AddAccessAuthentication(builder.Configuration);
         builder.Services.AddHttpSecurity(builder.Configuration, builder.Environment.IsDevelopment());
         builder.Services.AddExceptionHandler<ApiExceptionHandler>();
@@ -44,6 +46,7 @@ public sealed class Program
         app.UseAuthorization();
         app.MapAuthenticationEndpoints();
         app.MapChatEndpoints();
+        app.MapChatRealtime();
         await app.RunAsync();
     }
 }

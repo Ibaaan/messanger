@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using Messanger.Application.Chats;
 using Messanger.Application.Messages;
+using Messanger.Realtime;
 
 namespace Messanger.Chats;
 
@@ -13,9 +14,10 @@ internal static class ChatEndpoints
             Results.Ok(await chats.SearchUsersAsync(UserId(user), query, ct))).RequireAuthorization();
         endpoints.MapGet("/api/chats", async (ClaimsPrincipal user, ChatService chats, CancellationToken ct) =>
             Results.Ok(await chats.ListAsync(UserId(user), ct))).RequireAuthorization();
-        endpoints.MapPost("/api/chats/create", async (CreateChatRequest request, ClaimsPrincipal user, ChatService chats, CancellationToken ct) =>
+        endpoints.MapPost("/api/chats/create", async (CreateChatRequest request, ClaimsPrincipal user, ChatService chats, ChatBroadcaster broadcaster, CancellationToken ct) =>
         {
             var chat = await chats.CreateAsync(UserId(user), request.ChatName, request.Description, request.UserIds, ct);
+            await broadcaster.CreatedAsync(chat, ct);
             return Results.Created($"/api/chats/{chat.Id}", chat);
         }).RequireAuthorization();
         endpoints.MapGet("/api/chats/{chatId:long}", async (long chatId, ClaimsPrincipal user, ChatService chats, CancellationToken ct) =>

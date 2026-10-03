@@ -35,7 +35,7 @@ internal static class HttpSecurityRegistration
                 {
                     if (security.Value.AllowedOrigins.Length > 0)
                         policy.WithOrigins(security.Value.AllowedOrigins);
-                    policy.WithMethods("GET", "POST").WithHeaders("Authorization", "Content-Type");
+                    policy.WithMethods("GET", "POST", "DELETE").WithHeaders("Authorization", "Content-Type", "X-Requested-With", "X-SignalR-User-Agent");
                 });
             });
         return services;

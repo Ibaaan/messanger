@@ -43,6 +43,15 @@ internal static class AuthenticationRegistration
                 };
                 options.Events = new JwtBearerEvents
                 {
+                    OnMessageReceived = context =>
+                    {
+                        var request = context.Request;
+                        // Browsers cannot set Authorization on WebSocket/SSE requests. Restrict the query token to the hub.
+                        if (request.Path == "/hubs/chat" && request.Query["access_token"].Count == 1
+                            && (request.HttpContext.WebSockets.IsWebSocketRequest || request.Headers.Accept.ToString().Contains("text/event-stream", StringComparison.Ordinal)))
+                            context.Token = request.Query["access_token"];
+                        return Task.CompletedTask;
+                    },
                     OnTokenValidated = context =>
                     {
                         var principal = context.Principal!;
