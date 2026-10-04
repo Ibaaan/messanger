@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Messanger</title>
+  <script src="/lib/signalr/signalr.min.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <h1>Messanger</h1>
+  <p id="status" role="status" aria-live="polite">Log in or create an account.</p>
+  <section id="signed-out">
+    <h2>Account</h2>
+    <form id="account-form">
+      <fieldset id="account-fields">
+        <p><label>Username <input id="username" name="username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" autocomplete="username"></label></p>
+        <p><label>Password <input id="password" name="password" type="password" required minlength="10" maxlength="256" autocomplete="current-password"></label></p>
+        <button name="action" value="login">Log in</button>
+        <button name="action" value="register">Register and log in</button>
+      </fieldset>
+    </form>
+    <p>Username: 3–20 letters, numbers, or underscores. Password: 10–256 characters.</p>
+  </section>
+  <main id="signed-in" hidden>
+    <p>Signed in as <strong id="current-user"></strong>. <button id="logout" type="button">Log out</button></p>
+    <p>Tokens stay in this tab's memory. Reloading the page requires a new login.</p>
+    <section>
+      <h2>Create a group</h2>
+      <form id="search-form">
+        <label>Find people <input id="search-query" required maxlength="20" autocomplete="off"></label>
+        <button>Search</button>
+      </form>
+      <ul id="search-results"></ul>
+      <p id="selected-people">No people selected.</p>
+      <form id="create-form">
+        <p><label>Group name <input id="chat-name" required maxlength="120"></label></p>
+        <p><label>Description <input id="chat-description" maxlength="2000"></label></p>
+        <button id="create-button">Create group</button>
+      </form>
+    </section>
+    <section>
+      <h2>Your chats</h2>
+      <button id="refresh" type="button">Refresh chats</button>
+      <ul id="chats"></ul>
+    </section>
+    <section id="conversation" hidden>
+      <h2 id="conversation-name"></h2>
+      <p id="members"></p>
+      <button id="older" type="button">Load older messages</button>
+      <ol id="messages" aria-live="polite" aria-label="Messages"></ol>
+      <form id="message-form">
+        <p><label>Message <textarea id="message-text" rows="3" cols="50" required maxlength="4000"></textarea></label></p>
+        <button id="send-button">Send</button>
+      </form>
+    </section>
+  </main>
+  <noscript>JavaScript is required for live chat.</noscript>
+</body>
+</html>

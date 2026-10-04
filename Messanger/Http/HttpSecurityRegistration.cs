@@ -49,6 +49,8 @@ internal static class HttpSecurityRegistration
         {
             context.Response.Headers.CacheControl = "no-store";
             context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+            var socketOrigin = $"{(context.Request.IsHttps ? "wss" : "ws")}://{context.Request.Host}";
+            context.Response.Headers.ContentSecurityPolicy = $"default-src 'self'; script-src 'self'; connect-src 'self' {socketOrigin}; style-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
             if (!development && !context.Request.IsHttps)
             {
                 await ApiError.WriteAsync(context, 400, "https_required", "HTTPS is required.");
