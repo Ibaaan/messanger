@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.WebSockets;
+using System.Text;
 using System.Net.Http.Json;
 using Messanger.Application.Messages;
 using Messanger.Infrastructure.Persistence;
@@ -105,6 +107,22 @@ internal static class ChatRealtimeTests
         var login = await host.LoginAsync(user);
         using var wrongPath = await host.Client.GetAsync("/api/users/me?access_token=" + login.AccessToken);
         await ApiAssertions.ErrorAsync(wrongPath, HttpStatusCode.Unauthorized, "unauthorized");
+    }
+
+    public static async Task BrowserWebSocketAuthenticatesWithHubQueryToken(ApiTestHost host)
+    {
+        var user = await host.RegisterAsync();
+        var login = await host.LoginAsync(user);
+        var client = host.Server.CreateWebSocketClient();
+        client.ConfigureRequest = request => request.Headers.Origin = ApiTestHost.AllowedOrigin;
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var socket = await client.ConnectAsync(new Uri("wss://localhost/hubs/chat?access_token=" + login.AccessToken), cancellation.Token);
+        await socket.SendAsync(Encoding.UTF8.GetBytes("{\"protocol\":\"json\",\"version\":1}\u001e"), WebSocketMessageType.Text, true, cancellation.Token);
+        var buffer = new byte[1024];
+        var received = await socket.ReceiveAsync(buffer, cancellation.Token);
+        TestAssert.True(Encoding.UTF8.GetString(buffer, 0, received.Count).StartsWith("{}\u001e", StringComparison.Ordinal),
+            "A browser-style WebSocket query token should reach the SignalR handshake.");
+        await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Test complete", cancellation.Token);
     }
 
     private static async Task MustRejectAsync(Func<Task> action, string code)

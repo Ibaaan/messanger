@@ -45,6 +45,7 @@ foreach (var (name, run) in tests)
 
 (string Name, Func<ApiTestHost, Task> Run)[] apiTests =
 [
+    (nameof(ChatRealtimeTests.BrowserWebSocketAuthenticatesWithHubQueryToken), ChatRealtimeTests.BrowserWebSocketAuthenticatesWithHubQueryToken),
     (nameof(ChatRealtimeTests.MembersReceiveMessagesAfterPersistence), ChatRealtimeTests.MembersReceiveMessagesAfterPersistence),
     (nameof(ChatRealtimeTests.OutsidersCannotJoinOrSend), ChatRealtimeTests.OutsidersCannotJoinOrSend),
     (nameof(ChatRealtimeTests.DepartedSubscribersLoseDeliveryAndSendAccess), ChatRealtimeTests.DepartedSubscribersLoseDeliveryAndSendAccess),

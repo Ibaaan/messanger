@@ -42,6 +42,9 @@ public sealed class Program
             await ApiError.WriteAsync(status.HttpContext, status.HttpContext.Response.StatusCode, code, message);
         });
         app.UseCoreHttpSecurity(app.Environment.IsDevelopment());
+        app.UseDefaultFiles();
+        app.UseStaticFiles();
+        app.UseWebSockets();
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapAuthenticationEndpoints();
