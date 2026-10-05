@@ -7,3 +7,5 @@ riderModule.iml
 _docs/
 .idea
 .env
+
+.local/

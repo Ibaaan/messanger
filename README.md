@@ -1,6 +1,6 @@
 # Messanger
 
-ASP.NET Core 10 API with PostgreSQL persistence and access-token authentication, organized into separate projects with
+A minimal text messenger: ASP.NET Core 10, PostgreSQL, SignalR, and a plain HTML/JavaScript frontend, organized into separate projects with
 one type per file:
 
 | Project                            | Responsibility                                                            | References           |
@@ -31,12 +31,17 @@ are enough responsibilities to make the grouping useful:
 ```text
 Messanger/
   Authentication/    HTTP endpoints, request model, Bearer validation, account access policy
+  Chats/             User search, group creation, details, and history endpoints
+  Realtime/          Authorized SignalR hub and delivery
   Http/              Error responses, exception handling, transport/origin policies
+  wwwroot/           Plain HTML/JavaScript and the vendored SignalR browser client
   Program.cs         Host composition
 src/
   Messanger.Domain/   Entities kept flat: this small project has no competing categories
   Messanger.Application/
     Authentication/  Registration/login use cases, token/password ports, auth results
+    Chats/           Group workflows, membership access, and chat DTOs
+    Messages/        Text send/history use cases and DTOs
     Persistence/     Repository interfaces and unit-of-work contract
     UserResponse.cs  Shared safe user DTO
     UseCaseException.cs
@@ -79,7 +84,24 @@ variable. The database binds only to localhost and stores data in a named volume
 Schema changes are applied explicitly with EF migrations, never on application startup. Use deployment-managed
 credentials and database TLS for production.
 
-## Run the authentication API
+## Local configuration across terminals and IDEs
+
+Docker Compose loads `.env`; .NET does not. An exported `ConnectionStrings__Postgres` only exists in that terminal and its child processes. For persistent local development configuration, use .NET user secrets:
+
+```bash
+dotnet user-secrets set "ConnectionStrings:Postgres" 'Host=localhost;Port=5432;Database=messanger;Username=messanger;Password=messanger_local_only;Maximum Pool Size=20;Timeout=10;Command Timeout=30' --project Messanger
+mkdir -p .local
+# Generate this key once, keeping an existing key on later runs.
+(umask 077; test -f .local/jwt-signing.pem || openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out .local/jwt-signing.pem)
+dotnet user-secrets set "Jwt:PrivateKeyPath" "$(pwd)/.local/jwt-signing.pem" --project Messanger
+dotnet run --project Messanger --launch-profile Local
+```
+
+Match the connection string to your `.env` database, username, password, and mapped port. Start PostgreSQL with `docker compose up -d --wait` and apply the explicit EF migration command above first. Select the **Local** launch profile when running from an IDE; it sets Development mode, port 5100, and the matching browser origin. Open `http://localhost:5100/`.
+
+User secrets live outside Git and load only in Development; `.local/` is ignored and contains only the local signing key. Existing environment variables override user secrets, so remove stale overrides if you change configuration. Production still requires explicit connection/signing configuration and HTTPS. The HTTPS/manual-environment setup below remains available.
+
+## Run the app
 
 Generate a local signing key outside the repository, and configure the development HTTPS endpoint:
 
@@ -91,7 +113,7 @@ dotnet dev-certs https
 export ASPNETCORE_ENVIRONMENT=Development
 export ASPNETCORE_URLS=https://localhost:7100
 export HttpSecurity__AllowedOrigins__0=https://localhost:7100
-dotnet run --project Messanger
+dotnet run --project Messanger --no-launch-profile
 ```
 
 Keep the exported `ConnectionStrings__Postgres` from the database setup. .NET does not automatically load `.env`.
@@ -101,9 +123,8 @@ signing configuration fails startup. Do not generate a new production key on eve
 
 `HttpSecurity__TrustedProxies__0` can add an explicit trusted reverse-proxy IP for forwarded scheme/address headers.
 Built-in loopback proxy trust remains; arbitrary remote forwarders are not trusted. Empty `AllowedOrigins` accepts
-requests without an Origin header, but denies browser requests carrying one. CORS allows only GET/POST and
-Authorization/Content-Type, without cookies. Production rejects unencrypted requests; Development permits local HTTP for
-tooling. The current auth API limits request bodies to 16 KiB.
+requests without an Origin header, but denies browser requests carrying one. CORS allows GET/POST/DELETE and the authorization/content/SignalR client headers, without cookies. Production rejects unencrypted requests; Development permits local HTTP for
+tooling. HTTP bodies and SignalR messages are limited to 16 KiB. Tokens in query strings are accepted only for browser WebSocket/SSE requests to `/hubs/chat`; keep proxy logs free of token-bearing query strings.
 
 | Endpoint             | Access                         | Result                                                                                                                                                       |
 |----------------------|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -130,9 +151,36 @@ issuer, audience, expiry/not-before, `at+jwt` header type, `token_use=access`, a
 requests also check the current account status in PostgreSQL. Responses use `Cache-Control: no-store`; errors use
 `{ "error": { "code", "message", "requestId" } }` with actual JSON values.
 
-This is the first P0 milestone. Refresh/logout rotation remains P1 and no refresh token is issued yet; log in again when
-the access token expires. Chat/search/message endpoints, SignalR, the messaging UI, public-release rate limits, and
-production readiness remain on the status table. The host does not mutate the schema on startup.
+## Use the plain frontend
+
+Open `https://localhost:7100/` after starting the app above. There is no CSS, frontend framework, build step, or runtime CDN dependency. The official SignalR JavaScript client and its license are checked into `wwwroot/lib/signalr`.
+
+1. Open two tabs. Register/log in as a different user in each tab.
+2. In the first tab, search for the second user's username, select them, enter a group name, and create the group.
+3. The second user sees the group appear live. Open it in both tabs and send text messages.
+4. The latest 50 messages load in chronological order. Use **Load older messages** for earlier pages.
+5. Temporary disconnects trigger reconnect attempts and reload the latest history. Reloading the page clears the in-memory token and requires login again; saved messages remain in PostgreSQL.
+
+The UI renders all user-provided text with `textContent`. It merges live messages and history by message ID, so the sender's acknowledgement and broadcast do not create duplicates. It clears the session when the 15-minute access token expires. **Log out** clears this tab's memory/connection; server-side logout/refresh-family rotation remains P1.
+
+For local HTTP testing only, keep `ASPNETCORE_ENVIRONMENT=Development` and set both `ASPNETCORE_URLS` and `HttpSecurity__AllowedOrigins__0` to `http://localhost:5100`. Production requires HTTPS. The configured allowed origin must exactly match the URL used by the browser, including its port.
+
+## Chat API and live messages
+
+All chat/search endpoints and hub connections require an active account and an access token.
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /api/users/search?query=alice` | Up to 10 case-insensitive username matches, excluding caller and inactive accounts. |
+| `POST /api/chats/create` | Body `{ "chatName": "Group", "description": null, "userIds": [2] }`; atomically inserts a group, the caller as OWNER, and each unique selected participant as MEMBER. Requires 1–50 other active users. |
+| `GET /api/chats` | Caller’s active groups, members, and latest message summaries. |
+| `GET /api/chats/{chatId}` | Membership-protected group details plus the latest 50 messages. |
+| `GET /api/chats/{chatId}/messages?beforeMessageId=100&limit=50` | Membership-protected chronological history; maximum page size 50, exclusive ID cursor. |
+| `/hubs/chat` | SignalR `JoinChat(chatId)`, `LeaveChat(chatId)`, `SendMessage(chatId,text)`, and `SendReply(chatId,text,replyToMessageId)`. |
+
+Text messages contain 1–4000 characters. The sender ID comes from the access token; clients cannot choose it. Message writes check/lock the active sender and participant rows, validate that replies belong to the same chat, and commit before notification. A failed broadcast does not delete the saved message. Clients receive `ReceiveMessage` for joined chats, `ChatUpdated` for their active chats, and `ChatCreated` when added to a new group. Delivery rechecks active membership/account status, so a stale subscription does not grant access after leaving or suspension.
+
+Connection subscription bookkeeping currently supports a single application instance. Multiple instances need shared routing/backplane coordination. Account/member management, read/unread state, attachments, refresh/logout rotation, public-release rate limits, and deployment hardening remain separate tasks. The host does not mutate the schema on startup.
 
 ## Repository usage
 
@@ -143,13 +191,11 @@ a scope/context concurrently.
 Add methods and tracked entity mutations are persisted with `await unitOfWork.SaveChangesAsync(cancellationToken)`. A
 save is atomic; multi-save operations need an explicit database transaction. Queries accept cancellation tokens, history
 uses descending message-ID pagination with a maximum of 100 rows, and membership queries exclude departed users. User
-insertion also inserts a profile and normalizes the username with invariant uppercase.
+insertion also inserts a profile and normalizes the username with invariant uppercase. `IChatRepository.CreateAsync` and `IMessageRepository.SaveTextAsync` own explicit transactions and commit their complete operations internally; they are not staged Add methods. The application history contract caps pages at 50 and reverses the repository page into chronological order.
 
 Authentication use cases live in `Application/Authentication`; password hashing and JWT issuance are implemented in
 `Infrastructure/Authentication`. The HTTP host configures token validation and wires the adapters through dependency
-injection. Chat rules (active sender membership and same-chat replies/read markers), race-safe refresh rotation, and
-media cleanup/outbox processing remain to be implemented. Refresh repository revocation methods stage changes until
-`SaveChangesAsync`.
+injection. Chat use cases enforce active membership for reads and writes. Read-marker/unread workflows, account/member management, race-safe refresh rotation, and media cleanup/outbox processing remain to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
 
 ## Validation
 
@@ -160,16 +206,16 @@ dotnet build Messanger.sln
 dotnet run --project tests/Messanger.IntegrationTests
 ```
 
-The integration executable runs 19 named checks: the original seven repository scenarios plus registration, password
+The integration executable runs 32 named checks: the original seven repository scenarios plus registration, password
 hashing, concurrent username uniqueness, login, active-account authorization, JWT rejection cases, CORS, production
-HTTPS enforcement, and malformed/oversized bodies. Repository scenarios roll back their own transactions. HTTP scenarios
+HTTPS enforcement, malformed/oversized bodies, user discovery, atomic group creation, history paging, cross-chat reply rejection, membership loss, SignalR delivery, browser WebSocket authentication, new-chat notification, and reconnect recovery. Repository scenarios roll back their own transactions. HTTP scenarios
 use a generated schema in the supplied test database and a temporary RSA key; both are removed after the suite. Use a
 disposable database whose role can create/drop schemas. The test host applies migrations only to its generated schema.
 
 `Program.cs` lists the checks; `Api/` and `Repositories/` contain focused scenarios and `Support/` contains shared test
 infrastructure. The runner prints every PASS/FAIL result and exits with a nonzero code if any fail. Tests use ASP.NET
 Core's in-process test server and the real PostgreSQL provider; HTTPS certificate negotiation itself is not exercised by
-that test server.
+that test server. Browser QA additionally verified two-account live messaging, escaped text, duplicate suppression, reload/login recovery, and loading 57 messages across two history pages.
 
 Add a schema migration with:
 
