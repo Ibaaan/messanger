@@ -1,3 +1,5 @@
+name: messanger-local
+
 services:
   postgres:
     image: postgres:18

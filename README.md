@@ -78,7 +78,7 @@ dotnet ef database update --project src/Messanger.Infrastructure
 ```
 
 If you change `.env`, update the connection string to match. Compose reads `.env`; .NET reads the exported environment
-variable. The database binds only to localhost and stores data in a named volume. PostgreSQL 18 uses the
+variable. The Compose project is explicitly named `messanger-local` to avoid collisions with older stacks in a folder named Messanger. Its PostgreSQL 18 data is stored in the separate `messanger-local_postgres_data` volume. The database binds only to localhost and stores data in a named volume. PostgreSQL 18 uses the
 `/var/lib/postgresql` volume path. `docker compose down` stops the database and preserves its data.
 
 Schema changes are applied explicitly with EF migrations, never on application startup. Use deployment-managed
