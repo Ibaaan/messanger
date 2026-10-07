@@ -12,6 +12,7 @@ public sealed class ChatAccessService(IUserRepository users, IChatRepository cha
 
     public async Task RequireMemberAsync(long chatId, long userId, CancellationToken cancellationToken)
     {
+        ChatMembershipRules.RequirePositiveId(chatId);
         await RequireActiveAsync(userId, cancellationToken);
         if (!await chats.IsActiveParticipantAsync(chatId, userId, cancellationToken))
             throw new UseCaseException("forbidden", "You are not an active member of this chat.");

@@ -20,9 +20,7 @@ public sealed partial class ChatService(IUserRepository users, IChatRepository c
         long[]? userIds, CancellationToken cancellationToken)
     {
         await access.RequireActiveAsync(callerId, cancellationToken);
-        name = name?.Trim();
-        if (string.IsNullOrWhiteSpace(name) || name.Length > 120 || description?.Length > 2000)
-            throw new UseCaseException("validation_failed", "A chat needs a name of 1–120 characters and a description of at most 2000 characters.");
+        name = ChatMembershipRules.ValidateName(name, description);
         if (userIds is null || userIds.Length > 50 || userIds.Any(id => id <= 0))
             throw new UseCaseException("validation_failed", "Select 1–50 participants.");
         var participants = userIds.Where(id => id != callerId).Distinct().ToArray();
