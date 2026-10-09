@@ -17,7 +17,8 @@ internal sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) :
             UseCaseException { Code: "validation_failed" } validation => (422, validation.Code, validation.Message),
             UseCaseException { Code: "invalid_credentials" } credentials =>
                 (401, credentials.Code, credentials.Message),
-            UseCaseException { Code: "username_taken" } conflict => (409, conflict.Code, conflict.Message),
+            UseCaseException { Code: "username_taken" or "owner_transfer_required" or "member_already_active" or "membership_conflict" } conflict =>
+                (409, conflict.Code, conflict.Message),
             DbUpdateException
             {
                 InnerException: PostgresException

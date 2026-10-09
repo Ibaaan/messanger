@@ -45,6 +45,13 @@ foreach (var (name, run) in tests)
 
 (string Name, Func<ApiTestHost, Task> Run)[] apiTests =
 [
+    (nameof(ChatMembershipApiTests.OwnerAddsAndRejoinsWithoutDuplicatingMembership), ChatMembershipApiTests.OwnerAddsAndRejoinsWithoutDuplicatingMembership),
+    (nameof(ChatMembershipApiTests.ModeratorsCanRemoveOnlyOrdinaryMembers), ChatMembershipApiTests.ModeratorsCanRemoveOnlyOrdinaryMembers),
+    (nameof(ChatMembershipApiTests.OwnerTransfersBeforeLeaving), ChatMembershipApiTests.OwnerTransfersBeforeLeaving),
+    (nameof(ChatMembershipApiTests.ConcurrentTransfersKeepExactlyOneOwner), ChatMembershipApiTests.ConcurrentTransfersKeepExactlyOneOwner),
+    (nameof(ChatMembershipApiTests.MembershipContractsRejectInvalidInput), ChatMembershipApiTests.MembershipContractsRejectInvalidInput),
+    (nameof(ChatMembershipApiTests.LeaveIsIdempotentAndInactiveTargetsAreRejected), ChatMembershipApiTests.LeaveIsIdempotentAndInactiveTargetsAreRejected),
+    (nameof(ChatMembershipApiTests.ConcurrentAddsRespectTheMemberLimit), ChatMembershipApiTests.ConcurrentAddsRespectTheMemberLimit),
     (nameof(ChatRealtimeTests.BrowserWebSocketAuthenticatesWithHubQueryToken), ChatRealtimeTests.BrowserWebSocketAuthenticatesWithHubQueryToken),
     (nameof(ChatRealtimeTests.MembersReceiveMessagesAfterPersistence), ChatRealtimeTests.MembersReceiveMessagesAfterPersistence),
     (nameof(ChatRealtimeTests.OutsidersCannotJoinOrSend), ChatRealtimeTests.OutsidersCannotJoinOrSend),

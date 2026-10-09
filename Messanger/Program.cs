@@ -25,6 +25,7 @@ public sealed class Program
         builder.Services.AddPostgresRepositories(connectionString);
         builder.Services.AddScoped<ChatAccessService>();
         builder.Services.AddScoped<ChatService>();
+        builder.Services.AddScoped<ChatMembershipService>();
         builder.Services.AddScoped<MessageService>();
         builder.Services.AddChatRealtime();
         builder.Services.AddAccessAuthentication(builder.Configuration);
@@ -49,6 +50,7 @@ public sealed class Program
         app.UseAuthorization();
         app.MapAuthenticationEndpoints();
         app.MapChatEndpoints();
+        app.MapChatMembershipEndpoints();
         app.MapChatRealtime();
         await app.RunAsync();
     }
