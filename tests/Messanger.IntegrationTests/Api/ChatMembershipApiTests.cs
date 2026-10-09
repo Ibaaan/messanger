@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using Messanger.Application;
 using Messanger.Application.Chats;
+using Messanger.Application.Persistence;
 using Messanger.Domain;
 using Messanger.Infrastructure.Persistence;
 using Messanger.IntegrationTests.Support;
@@ -151,6 +153,22 @@ internal static class ChatMembershipApiTests
         }
         finally { foreach (var response in responses) response.Dispose(); }
         TestAssert.Equal(51, await db.Participants.CountAsync(item => item.ChatId == group.Chat.Id && item.LeftAt == null), "Concurrent additions must not exceed the member limit.");
+    }
+
+    public static async Task ReusedScopeCannotRetainFormerOwnerPermissions(ApiTestHost host)
+    {
+        var group = await ChatTestGroup.CreateAsync(host);
+        await using var scope = host.Services.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IChatMembershipRepository>();
+        await repository.UpdateDetailsAsync(group.Chat.Id, group.Owner.Id, "Before transfer", null, default);
+        using var transfer = await host.SendAsAsync(HttpMethod.Post, Path(group, "/ownership"), group.OwnerToken, new { userId = group.Member.Id });
+        transfer.EnsureSuccessStatusCode();
+        try
+        {
+            await repository.UpdateDetailsAsync(group.Chat.Id, group.Owner.Id, "Unauthorized edit", null, default);
+            throw new InvalidOperationException("A cached tracked OWNER role must not survive ownership transfer.");
+        }
+        catch (UseCaseException exception) when (exception.Code == "forbidden") { }
     }
 
     private static string Path(ChatTestGroup group, string suffix = "") => $"/api/chats/{group.Chat.Id}" + suffix;

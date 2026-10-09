@@ -14,7 +14,7 @@ internal sealed class ChatMembershipRepository(MessangerDbContext db, TimeProvid
             ChatMembershipRules.RequireOwner(actor);
             await RequireActiveTargetAsync(userId, ct);
             var target = members.SingleOrDefault(member => member.UserId == userId);
-            if (target?.LeftAt is null && target is not null)
+            if (target is { LeftAt: null })
                 throw new UseCaseException("member_already_active", "This user is already an active participant.");
             if (members.Count(member => member.LeftAt == null) >= ChatMembershipRules.MaximumMembers)
                 throw new UseCaseException("membership_conflict", "A group may contain at most 51 active participants.");
@@ -92,11 +92,17 @@ internal sealed class ChatMembershipRepository(MessangerDbContext db, TimeProvid
             if (id == callerId && user?.AccountStatus != "ACTIVE")
                 throw new UseCaseException("forbidden", "An active account is required.");
         }
+        var chatAlreadyTracked = db.Chats.Local.Any(chat => chat.Id == chatId);
+        var trackedMemberIds = db.Participants.Local.Where(member => member.ChatId == chatId).Select(member => member.Id).ToHashSet();
         var chat = await db.Chats.FromSqlInterpolated($"SELECT * FROM chats WHERE id = {chatId} FOR UPDATE")
             .SingleOrDefaultAsync(ct) ?? throw new UseCaseException("forbidden", "You are not an active member of this chat.");
+        if (chatAlreadyTracked) await db.Entry(chat).ReloadAsync(ct);
         if (chat.ChatType != "group") throw new UseCaseException("membership_conflict", "Only group chats support membership management.");
         var members = await db.Participants.FromSqlInterpolated($"SELECT * FROM chat_participants WHERE chat_id = {chatId} ORDER BY user_id FOR UPDATE")
             .ToListAsync(ct);
+        // EF identity resolution can return older tracked values; permission checks need the state protected by these locks.
+        foreach (var member in members.Where(member => trackedMemberIds.Contains(member.Id)))
+            await db.Entry(member).ReloadAsync(ct);
         var actor = members.SingleOrDefault(member => member.UserId == callerId);
         if (actor is null || (!allowDepartedActor && actor.LeftAt is not null))
             throw new UseCaseException("forbidden", "You are not an active member of this chat.");
