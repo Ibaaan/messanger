@@ -123,7 +123,7 @@ signing configuration fails startup. Do not generate a new production key on eve
 
 `HttpSecurity__TrustedProxies__0` can add an explicit trusted reverse-proxy IP for forwarded scheme/address headers.
 Built-in loopback proxy trust remains; arbitrary remote forwarders are not trusted. Empty `AllowedOrigins` accepts
-requests without an Origin header, but denies browser requests carrying one. CORS allows GET/POST/DELETE and the authorization/content/SignalR client headers, without cookies. Production rejects unencrypted requests; Development permits local HTTP for
+requests without an Origin header, but denies browser requests carrying one. CORS allows GET/POST/PATCH/DELETE and the authorization/content/SignalR client headers, without cookies. Production rejects unencrypted requests; Development permits local HTTP for
 tooling. HTTP bodies and SignalR messages are limited to 16 KiB. Tokens in query strings are accepted only for browser WebSocket/SSE requests to `/hubs/chat`; keep proxy logs free of token-bearing query strings.
 
 | Endpoint             | Access                         | Result                                                                                                                                                       |
@@ -180,7 +180,47 @@ All chat/search endpoints and hub connections require an active account and an a
 
 Text messages contain 1–4000 characters. The sender ID comes from the access token; clients cannot choose it. Message writes check/lock the active sender and participant rows, validate that replies belong to the same chat, and commit before notification. A failed broadcast does not delete the saved message. Clients receive `ReceiveMessage` for joined chats, `ChatUpdated` for their active chats, and `ChatCreated` when added to a new group. Delivery rechecks active membership/account status, so a stale subscription does not grant access after leaving or suspension.
 
-Connection subscription bookkeeping currently supports a single application instance. Multiple instances need shared routing/backplane coordination. Account/member management, read/unread state, attachments, refresh/logout rotation, public-release rate limits, and deployment hardening remain separate tasks. The host does not mutate the schema on startup.
+Connection subscription bookkeeping currently supports a single application instance. Multiple instances need shared routing/backplane coordination. Account administration, read/unread state, attachments, refresh/logout rotation, public-release rate limits, and deployment hardening remain separate tasks. The host does not mutate the schema on startup.
+
+## Group membership contracts
+
+Development exposes the generated OpenAPI document at `/openapi/v1.json`; Production does not expose it.
+The document describes request/response DTOs, bearer authentication, and the shared error envelope.
+JSON serialization has a bounded depth of 32 so nested OpenAPI schemas can be generated; HTTP bodies remain limited to 16 KiB.
+
+All routes below require an active account. Group IDs and user IDs must be positive integers.
+
+| Route | JSON body | Permission and result |
+| --- | --- | --- |
+| `POST /api/chats/{chatId}/members` | `{ "userId": 2 }` | OWNER adds an active account; 200 chat summary. |
+| `DELETE /api/chats/{chatId}/members/{userId}` | None | OWNER removes others; MODERATOR removes ordinary MEMBERs only; 204. |
+| `POST /api/chats/{chatId}/leave` | None | Non-owner leaves; repeated leave succeeds with 204. OWNER must transfer first. |
+| `POST /api/chats/{chatId}/ownership` | `{ "userId": 2 }` | OWNER transfers to another active participant; 200 summary. Previous owner becomes MEMBER. |
+| `PATCH /api/chats/{chatId}/members/{userId}/role` | `{ "role": "MODERATOR" }` | OWNER assigns MEMBER or MODERATOR; 200 summary. OWNER changes use the transfer route. |
+| `PATCH /api/chats/{chatId}` | `{ "chatName": "Friends", "description": null }` | OWNER replaces group name/description; 200 summary. Name trims to 1–120 characters; description at most 2000. |
+
+Groups permit at most 51 active participants including the owner. Adding an existing active member returns 409.
+Only the owner can re-add a departed user; the unique membership row is reused and the role resets to MEMBER.
+Removing an already departed participant is idempotent when the caller still has permission. Use the leave route for yourself.
+Ownership, roles, and the capacity limit are checked within serialized PostgreSQL transactions.
+
+Malformed JSON/type binding returns 400, missing/invalid business values 422, insufficient access 403,
+missing participant 404, and state conflicts 409. Examples of conflict codes are `owner_transfer_required`,
+`member_already_active`, and `membership_conflict`. Errors retain the same JSON shape:
+
+```json
+{ "error": { "code": "owner_transfer_required", "message": "Transfer ownership before leaving the chat.", "requestId": "request identifier" } }
+```
+
+SignalR business failures use `HubException` messages in the form `code: message`, including `validation_failed` and `forbidden`.
+After committed membership/detail changes, current members receive `ChatMembershipChanged(chatId)` and should reload chat details/list.
+Removed/departed users receive `ChatAccessRevoked(chatId)` on each joined connection and are unsubscribed immediately.
+The browser clears the revoked conversation. Re-added users must invoke `JoinChat` again; rejoining a group never silently
+restores an old live subscription. The membership version fence rejects joins racing with removal.
+
+Events are best effort after commit; reload the chat list/history after reconnecting. Subscription state and revocation
+coordination currently support one application instance. The API supports group administration; the plain frontend
+reacts to changes but does not yet provide membership/role management controls.
 
 ## Repository usage
 
@@ -195,7 +235,7 @@ insertion also inserts a profile and normalizes the username with invariant uppe
 
 Authentication use cases live in `Application/Authentication`; password hashing and JWT issuance are implemented in
 `Infrastructure/Authentication`. The HTTP host configures token validation and wires the adapters through dependency
-injection. Chat use cases enforce active membership for reads and writes. Read-marker/unread workflows, account/member management, race-safe refresh rotation, and media cleanup/outbox processing remain to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
+injection. Chat use cases enforce active membership for reads and writes. Read-marker/unread workflows, account administration, race-safe refresh rotation, and media cleanup/outbox processing remain to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
 
 ## Validation
 
@@ -206,9 +246,9 @@ dotnet build Messanger.sln
 dotnet run --project tests/Messanger.IntegrationTests
 ```
 
-The integration executable runs 32 named checks: the original seven repository scenarios plus registration, password
+The integration executable runs 45 named checks: the original seven repository scenarios plus registration, password
 hashing, concurrent username uniqueness, login, active-account authorization, JWT rejection cases, CORS, production
-HTTPS enforcement, malformed/oversized bodies, user discovery, atomic group creation, history paging, cross-chat reply rejection, membership loss, SignalR delivery, browser WebSocket authentication, new-chat notification, and reconnect recovery. Repository scenarios roll back their own transactions. HTTP scenarios
+HTTPS enforcement, malformed/oversized bodies, user discovery, atomic group creation, history paging, cross-chat reply rejection, membership loss, SignalR delivery, browser WebSocket authentication, new-chat notification, reconnect recovery, member add/remove/rejoin, moderator restrictions, concurrent ownership/capacity changes, multi-tab revocation, stale tracked authorization, hub validation, and Development/Production OpenAPI availability. Repository scenarios roll back their own transactions. HTTP scenarios
 use a generated schema in the supplied test database and a temporary RSA key; both are removed after the suite. Use a
 disposable database whose role can create/drop schemas. The test host applies migrations only to its generated schema.
 
