@@ -10,6 +10,8 @@ internal sealed class SignalRTestClient : IAsyncDisposable
 {
     public HubConnection Connection { get; }
     public Channel<MessageResponse> Messages { get; } = Channel.CreateUnbounded<MessageResponse>();
+    public Channel<long> RevokedChats { get; } = Channel.CreateUnbounded<long>();
+    public Channel<long> ChangedChats { get; } = Channel.CreateUnbounded<long>();
     public Channel<ChatResponse> Chats { get; } = Channel.CreateUnbounded<ChatResponse>();
 
     private SignalRTestClient(ApiTestHost host, string token)
@@ -23,6 +25,8 @@ internal sealed class SignalRTestClient : IAsyncDisposable
         }).Build();
         Connection.On<MessageResponse>("ReceiveMessage", message => Messages.Writer.TryWrite(message));
         Connection.On<ChatResponse>("ChatCreated", chat => Chats.Writer.TryWrite(chat));
+        Connection.On<long>("ChatAccessRevoked", chatId => RevokedChats.Writer.TryWrite(chatId));
+        Connection.On<long>("ChatMembershipChanged", chatId => ChangedChats.Writer.TryWrite(chatId));
     }
 
     public static async Task<SignalRTestClient> ConnectAsync(ApiTestHost host, string token)

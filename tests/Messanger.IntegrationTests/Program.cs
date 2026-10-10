@@ -45,6 +45,9 @@ foreach (var (name, run) in tests)
 
 (string Name, Func<ApiTestHost, Task> Run)[] apiTests =
 [
+    (nameof(ChatMembershipRealtimeTests.RemovalRevokesEveryJoinedConnectionImmediately), ChatMembershipRealtimeTests.RemovalRevokesEveryJoinedConnectionImmediately),
+    (nameof(ChatMembershipRealtimeTests.RejoinedMemberMustJoinAgainBeforeDelivery), ChatMembershipRealtimeTests.RejoinedMemberMustJoinAgainBeforeDelivery),
+    (nameof(ChatMembershipRealtimeTests.InvalidHubArgumentsUseStableBusinessErrors), ChatMembershipRealtimeTests.InvalidHubArgumentsUseStableBusinessErrors),
     (nameof(ChatMembershipApiTests.ReusedScopeCannotRetainFormerOwnerPermissions), ChatMembershipApiTests.ReusedScopeCannotRetainFormerOwnerPermissions),
     (nameof(ChatMembershipApiTests.OwnerAddsAndRejoinsWithoutDuplicatingMembership), ChatMembershipApiTests.OwnerAddsAndRejoinsWithoutDuplicatingMembership),
     (nameof(ChatMembershipApiTests.ModeratorsCanRemoveOnlyOrdinaryMembers), ChatMembershipApiTests.ModeratorsCanRemoveOnlyOrdinaryMembers),

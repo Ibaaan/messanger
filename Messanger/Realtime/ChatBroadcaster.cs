@@ -39,5 +39,24 @@ internal sealed class ChatBroadcaster(IHubContext<ChatHub> hub, IChatRepository 
         }
     }
 
+    public async Task MembershipChangedAsync(long chatId, long? revokedUserId, CancellationToken cancellationToken)
+    {
+        // Revoke in-memory access synchronously, before any cancellable I/O or best-effort notification.
+        var affected = revokedUserId is { } userId ? subscriptions.Revoke(chatId, userId) : [];
+        try
+        {
+            foreach (var connectionId in affected)
+                await hub.Groups.RemoveFromGroupAsync(connectionId, $"chat:{chatId}", CancellationToken.None);
+            if (revokedUserId is { } removed)
+                await hub.Clients.User(Id(removed)).SendAsync("ChatAccessRevoked", chatId, CancellationToken.None);
+            var members = await chats.GetActiveUserIdsAsync(chatId, cancellationToken);
+            await hub.Clients.Users(members.Select(Id).ToArray()).SendAsync("ChatMembershipChanged", chatId, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Chat {ChatId} membership committed but notification failed", chatId);
+        }
+    }
+
     private static string Id(long id) => id.ToString(CultureInfo.InvariantCulture);
 }

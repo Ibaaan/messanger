@@ -11,6 +11,7 @@ internal static class RealtimeRegistration
         services.AddScoped<ChatBroadcaster>();
         services.AddSignalR(options =>
         {
+            options.AddFilter<ChatHubFilter>();
             options.MaximumReceiveMessageSize = 16 * 1024;
             options.MaximumParallelInvocationsPerClient = 1;
             options.EnableDetailedErrors = false;

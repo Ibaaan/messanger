@@ -70,6 +70,32 @@ async function startConnection() {
   };
   current.on("ChatCreated", refreshSoon);
   current.on("ChatUpdated", refreshSoon);
+  current.on("ChatMembershipChanged", async chatId => {
+    refreshSoon();
+    if (connection !== current || String(activeChatId) !== String(chatId)) return;
+    const selection = generation;
+    try {
+      const details = await api("/api/chats/" + chatId);
+      if (connection !== current || selection !== generation) return;
+      element("conversation-name").textContent = details.chat.name;
+      element("members").textContent = "Members: " + details.chat.participants.map(user => user.username).join(", ");
+    } catch (error) { if (selection === generation) report(error); }
+  });
+  current.on("ChatAccessRevoked", chatId => {
+    if (connection !== current) return;
+    if (String(activeChatId) === String(chatId)) {
+      generation++;
+      activeChatId = null;
+      oldestCursor = null;
+      messages.clear();
+      element("messages").replaceChildren();
+      element("message-text").value = "";
+      element("conversation").hidden = true;
+      updateSendButton();
+      status("You no longer have access to this chat.");
+    }
+    refreshSoon();
+  });
   current.onreconnecting(() => { status("Disconnected. Reconnecting…"); updateSendButton(); });
   current.onreconnected(async () => {
     if (connection !== current) return;

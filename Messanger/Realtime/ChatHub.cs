@@ -28,17 +28,28 @@ internal sealed class ChatHub(ChatAccessService access, MessageService messages,
 
     public async Task JoinChat(long chatId)
     {
+        // Capture the fence before checking the DB, so an in-flight join cannot resurrect a revoked subscription.
+        var version = subscriptions.Version(chatId, UserId);
+        await access.RequireMemberAsync(chatId, UserId, Context.ConnectionAborted);
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"chat:{chatId}", Context.ConnectionAborted);
         try
         {
+            if (!subscriptions.Join(Context.ConnectionId, chatId, version))
+                throw new UseCaseException("forbidden", "Chat access changed while joining. Check membership and try again.");
             await access.RequireMemberAsync(chatId, UserId, Context.ConnectionAborted);
-            await Groups.AddToGroupAsync(Context.ConnectionId, $"chat:{chatId}", Context.ConnectionAborted);
-            subscriptions.Join(Context.ConnectionId, chatId);
         }
-        catch (UseCaseException exception) { throw new HubException(exception.Code + ": " + exception.Message); }
+        catch
+        {
+            subscriptions.Leave(Context.ConnectionId, chatId);
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"chat:{chatId}");
+            throw;
+        }
     }
 
     public async Task LeaveChat(long chatId)
     {
+        ChatMembershipRules.RequirePositiveId(chatId);
+        await access.RequireActiveAsync(UserId, Context.ConnectionAborted);
         subscriptions.Leave(Context.ConnectionId, chatId);
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"chat:{chatId}", Context.ConnectionAborted);
     }
@@ -48,12 +59,8 @@ internal sealed class ChatHub(ChatAccessService access, MessageService messages,
 
     private async Task<MessageResponse> SendAsync(long chatId, string? text, long? replyToMessageId)
     {
-        try
-        {
-            var message = await messages.SendAsync(chatId, UserId, text, replyToMessageId, Context.ConnectionAborted);
-            await broadcaster.MessageAsync(message, Context.ConnectionAborted);
-            return message;
-        }
-        catch (UseCaseException exception) { throw new HubException(exception.Code + ": " + exception.Message); }
+        var message = await messages.SendAsync(chatId, UserId, text, replyToMessageId, Context.ConnectionAborted);
+        await broadcaster.MessageAsync(message, Context.ConnectionAborted);
+        return message;
     }
 }
