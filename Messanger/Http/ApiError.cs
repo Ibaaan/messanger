@@ -5,10 +5,8 @@ public static class ApiError
     public static Task WriteAsync(HttpContext context, int statusCode, string code, string message)
     {
         context.Response.StatusCode = statusCode;
-        return context.Response.WriteAsJsonAsync(new
-        {
-            error = new { code, message, requestId = context.TraceIdentifier }
-        }, context.RequestAborted);
+        return context.Response.WriteAsJsonAsync(
+            new ApiErrorResponse(new ApiErrorDetails(code, message, context.TraceIdentifier)), context.RequestAborted);
     }
 
     public static (string Code, string Message) ForStatus(int statusCode)

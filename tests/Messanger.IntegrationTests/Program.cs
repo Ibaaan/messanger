@@ -45,6 +45,8 @@ foreach (var (name, run) in tests)
 
 (string Name, Func<ApiTestHost, Task> Run)[] apiTests =
 [
+    (nameof(ApiContractTests.DevelopmentPublishesAuthenticatedContracts), ApiContractTests.DevelopmentPublishesAuthenticatedContracts),
+    (nameof(ApiContractTests.ProductionDoesNotPublishContracts), ApiContractTests.ProductionDoesNotPublishContracts),
     (nameof(ChatMembershipRealtimeTests.RemovalRevokesEveryJoinedConnectionImmediately), ChatMembershipRealtimeTests.RemovalRevokesEveryJoinedConnectionImmediately),
     (nameof(ChatMembershipRealtimeTests.RejoinedMemberMustJoinAgainBeforeDelivery), ChatMembershipRealtimeTests.RejoinedMemberMustJoinAgainBeforeDelivery),
     (nameof(ChatMembershipRealtimeTests.InvalidHubArgumentsUseStableBusinessErrors), ChatMembershipRealtimeTests.InvalidHubArgumentsUseStableBusinessErrors),

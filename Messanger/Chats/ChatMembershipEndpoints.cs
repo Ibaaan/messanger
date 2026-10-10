@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Messanger.Application.Chats;
+using Messanger.Http;
 using Messanger.Realtime;
 
 namespace Messanger.Chats;
@@ -16,21 +17,21 @@ internal static class ChatMembershipEndpoints
             await broadcaster.MembershipChangedAsync(chatId, null, ct);
             return Results.Ok(result);
         })
-            .WithName("AddChatMember").Produces<ChatResponse>();
+            .WithName("AddChatMember").Produces<ChatResponse>().WithApiErrors();
         group.MapDelete("/members/{userId:long}", async (long chatId, long userId, ClaimsPrincipal user,
             ChatMembershipService membership, ChatBroadcaster broadcaster, CancellationToken ct) =>
         {
             await membership.RemoveAsync(chatId, ChatEndpoints.UserId(user), userId, ct);
             await broadcaster.MembershipChangedAsync(chatId, userId, ct);
             return Results.NoContent();
-        }).WithName("RemoveChatMember").Produces(StatusCodes.Status204NoContent);
+        }).WithName("RemoveChatMember").Produces(StatusCodes.Status204NoContent).WithApiErrors();
         group.MapPost("/leave", async (long chatId, ClaimsPrincipal user, ChatMembershipService membership, ChatBroadcaster broadcaster, CancellationToken ct) =>
         {
             var callerId = ChatEndpoints.UserId(user);
             await membership.LeaveAsync(chatId, callerId, ct);
             await broadcaster.MembershipChangedAsync(chatId, callerId, ct);
             return Results.NoContent();
-        }).WithName("LeaveChat").Produces(StatusCodes.Status204NoContent);
+        }).WithName("LeaveChat").Produces(StatusCodes.Status204NoContent).WithApiErrors();
         group.MapPost("/ownership", async (long chatId, TransferChatOwnershipRequest request, ClaimsPrincipal user,
             ChatMembershipService membership, ChatBroadcaster broadcaster, CancellationToken ct) =>
         {
@@ -38,7 +39,7 @@ internal static class ChatMembershipEndpoints
             await broadcaster.MembershipChangedAsync(chatId, null, ct);
             return Results.Ok(result);
         })
-            .WithName("TransferChatOwnership").Produces<ChatResponse>();
+            .WithName("TransferChatOwnership").Produces<ChatResponse>().WithApiErrors();
         group.MapPatch("/members/{userId:long}/role", async (long chatId, long userId, ChangeChatMemberRoleRequest request,
             ClaimsPrincipal user, ChatMembershipService membership, ChatBroadcaster broadcaster, CancellationToken ct) =>
         {
@@ -46,7 +47,7 @@ internal static class ChatMembershipEndpoints
             await broadcaster.MembershipChangedAsync(chatId, null, ct);
             return Results.Ok(result);
         })
-            .WithName("ChangeChatMemberRole").Produces<ChatResponse>();
+            .WithName("ChangeChatMemberRole").Produces<ChatResponse>().WithApiErrors();
         group.MapPatch("", async (long chatId, UpdateChatRequest request, ClaimsPrincipal user,
             ChatMembershipService membership, ChatBroadcaster broadcaster, CancellationToken ct) =>
         {
@@ -54,7 +55,7 @@ internal static class ChatMembershipEndpoints
             await broadcaster.MembershipChangedAsync(chatId, null, ct);
             return Results.Ok(result);
         })
-            .WithName("UpdateChatDetails").Produces<ChatResponse>();
+            .WithName("UpdateChatDetails").Produces<ChatResponse>().WithApiErrors();
         return endpoints;
     }
 }

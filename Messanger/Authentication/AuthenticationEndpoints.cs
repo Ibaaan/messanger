@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Messanger.Application;
+using Messanger.Http;
 using Messanger.Application.Authentication;
 using Messanger.Application.Persistence;
 
@@ -17,13 +18,13 @@ internal static class AuthenticationEndpoints
             {
                 var user = await authentication.RegisterAsync(request.Username, request.Password, cancellationToken);
                 return Results.Json(user, statusCode: StatusCodes.Status201Created);
-            }).AllowAnonymous();
+            }).AllowAnonymous().WithTags("Authentication").WithName("Register").Produces<UserResponse>(StatusCodes.Status201Created).WithApiErrors();
 
         endpoints.MapPost("/auth/login",
                 async (CredentialsRequest request, AuthenticationService authentication,
                         CancellationToken cancellationToken) =>
                     Results.Ok(await authentication.LoginAsync(request.Username, request.Password, cancellationToken)))
-            .AllowAnonymous();
+            .AllowAnonymous().WithTags("Authentication").WithName("Login").Produces<LoginResponse>().WithApiErrors();
 
         // A minimal protected endpoint for the signed-in account; never returns persistence entities or hashes.
         endpoints.MapGet("/api/users/me",
@@ -33,7 +34,7 @@ internal static class AuthenticationEndpoints
                     CultureInfo.InvariantCulture);
                 var user = await users.GetByIdAsync(userId, cancellationToken);
                 return user is { AccountStatus: "ACTIVE" } ? Results.Ok(UserResponse.From(user)) : Results.Forbid();
-            }).RequireAuthorization();
+            }).RequireAuthorization().WithTags("Users").WithName("GetCurrentUser").Produces<UserResponse>().WithApiErrors();
         return endpoints;
     }
 }

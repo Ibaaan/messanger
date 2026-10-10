@@ -21,7 +21,7 @@ public sealed class Program
 
         builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 16 * 1024);
         builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
-        builder.Services.Configure<JsonOptions>(options => options.SerializerOptions.MaxDepth = 8);
+        builder.Services.Configure<JsonOptions>(options => options.SerializerOptions.MaxDepth = 32);
         builder.Services.AddPostgresRepositories(connectionString);
         builder.Services.AddScoped<ChatAccessService>();
         builder.Services.AddScoped<ChatService>();
@@ -32,6 +32,7 @@ public sealed class Program
         builder.Services.AddHttpSecurity(builder.Configuration, builder.Environment.IsDevelopment());
         builder.Services.AddExceptionHandler<ApiExceptionHandler>();
         builder.Services.AddProblemDetails();
+        builder.Services.AddApiContracts();
 
         var app = builder.Build();
         // Fail startup on an invalid/missing signing key rather than the first login request.
@@ -51,6 +52,7 @@ public sealed class Program
         app.MapAuthenticationEndpoints();
         app.MapChatEndpoints();
         app.MapChatMembershipEndpoints();
+        if (app.Environment.IsDevelopment()) app.MapOpenApi().AllowAnonymous();
         app.MapChatRealtime();
         await app.RunAsync();
     }
