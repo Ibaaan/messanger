@@ -17,7 +17,7 @@ internal sealed class ActiveAccountHandler(IUserRepository users, IHttpContextAc
 
         var cancellationToken = contexts.HttpContext?.RequestAborted ?? default;
         var user = await users.GetByIdAsync(userId, cancellationToken);
-        if (user?.AccountStatus == "ACTIVE")
+        if (AccountSession.IsCurrent(user, context.User))
             context.Succeed(requirement);
     }
 }

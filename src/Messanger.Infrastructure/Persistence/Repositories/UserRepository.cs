@@ -9,7 +9,8 @@ internal sealed class UserRepository(MessangerDbContext db) : IUserRepository
 {
     public Task<User?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
-        return db.Users.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        // Authorization callers need current values rather than an earlier tracked account snapshot.
+        return db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
 
     public Task<User?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default)

@@ -21,7 +21,8 @@ internal static class TestJwt
             ["nbf"] = now.ToUnixTimeSeconds(),
             ["exp"] = now.AddMinutes(15).ToUnixTimeSeconds(),
             ["role"] = "USER",
-            ["token_use"] = "access"
+            ["token_use"] = "access",
+            ["session_version"] = 0
         };
         change?.Invoke(payload);
         using var otherKey = RSA.Create(2048);

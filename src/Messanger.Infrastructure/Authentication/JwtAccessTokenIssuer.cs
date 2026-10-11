@@ -25,6 +25,7 @@ internal sealed class JwtAccessTokenIssuer(
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString(CultureInfo.InvariantCulture)),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")),
                 new Claim("role", user.Role),
+                new Claim("session_version", user.SessionVersion.ToString(CultureInfo.InvariantCulture)),
                 new Claim("token_use", "access")
             ]),
             IssuedAt = now.UtcDateTime,

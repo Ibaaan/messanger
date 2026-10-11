@@ -9,5 +9,6 @@ public sealed class User
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public string Language { get; set; } = "en";
     public string Role { get; set; } = "USER";
+    public int SessionVersion { get; set; }
     public string AccountStatus { get; set; } = "ACTIVE";
 }
