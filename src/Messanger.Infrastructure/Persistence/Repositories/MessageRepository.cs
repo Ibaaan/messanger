@@ -26,8 +26,8 @@ internal sealed class MessageRepository(MessangerDbContext db) : IMessageReposit
         from message in query
         join user in db.Users on message.SenderId equals user.Id
         join profile in db.Set<UserProfile>() on user.Id equals profile.UserId
-        select new MessageResponse(message.Id, message.ChatId, user.Id, user.Username,
-            profile.DisplayName, message.Text, message.CreatedAt, message.ReplyToMessageId);
+        select new MessageResponse(message.Id, message.ChatId, user.Id, user.AccountStatus == "DELETED" ? "deleted_account" : user.Username,
+            user.AccountStatus == "DELETED" ? "Deleted account" : profile.DisplayName, message.Text, message.CreatedAt, message.ReplyToMessageId);
 
     public async Task<IReadOnlyList<MessageResponse>> GetHistoryResponsesAsync(long chatId, long? beforeId, int limit, CancellationToken cancellationToken = default)
     {

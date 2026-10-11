@@ -18,6 +18,7 @@ public static class DependencyInjection
             options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>(), pg => pg.SetPostgresVersion(18, 0)));
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<MessangerDbContext>());
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IAccountRepository, AccountRepository>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IChatRepository, ChatRepository>();
         services.AddScoped<IChatMembershipRepository, ChatMembershipRepository>();

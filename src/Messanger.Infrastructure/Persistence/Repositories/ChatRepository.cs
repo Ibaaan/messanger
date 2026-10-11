@@ -1,3 +1,4 @@
+using Messanger.Application;
 using Messanger.Application.Persistence;
 using Messanger.Application.Chats;
 using Messanger.Domain;
@@ -30,6 +31,11 @@ internal sealed class ChatRepository(MessangerDbContext db) : IChatRepository
     public async Task CreateAsync(Chat chat, long ownerId, IReadOnlyCollection<long> userIds, CancellationToken cancellationToken = default)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        // Account deletion/status changes take an exclusive user lock before checking ownership.
+        foreach (var userId in userIds.Append(ownerId).Distinct().Order())
+            if (!await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id = {userId} AND account_status = 'ACTIVE' FOR SHARE")
+                .AsNoTracking().AnyAsync(cancellationToken))
+                throw new UseCaseException("validation_failed", "All participants must be existing active accounts.");
         db.Chats.Add(chat);
         await db.SaveChangesAsync(cancellationToken);
         foreach (var userId in userIds.Append(ownerId).Distinct())

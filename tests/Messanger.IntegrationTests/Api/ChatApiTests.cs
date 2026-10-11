@@ -63,9 +63,9 @@ internal static class ChatApiTests
             {
                 await scope.ServiceProvider.GetRequiredService<IChatRepository>()
                     .CreateAsync(new Chat { Name = name }, owner.Id, [long.MaxValue]);
-                throw new InvalidOperationException("An invalid participant FK should be rejected.");
+                throw new InvalidOperationException("An invalid participant should be rejected before insertion.");
             }
-            catch (DbUpdateException) { }
+            catch (UseCaseException exception) when (exception.Code == "validation_failed") { }
         }
         await using var verification = host.Services.CreateAsyncScope();
         var db = verification.ServiceProvider.GetRequiredService<MessangerDbContext>();

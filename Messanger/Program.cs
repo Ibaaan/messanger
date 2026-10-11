@@ -1,3 +1,5 @@
+using Messanger.Accounts;
+using Messanger.Application.Accounts;
 using Messanger.Authentication;
 using Messanger.Chats;
 using Messanger.Realtime;
@@ -23,6 +25,7 @@ public sealed class Program
         builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
         builder.Services.Configure<JsonOptions>(options => options.SerializerOptions.MaxDepth = 32);
         builder.Services.AddPostgresRepositories(connectionString);
+        builder.Services.AddScoped<AccountService>();
         builder.Services.AddScoped<ChatAccessService>();
         builder.Services.AddScoped<ChatService>();
         builder.Services.AddScoped<ChatMembershipService>();
@@ -50,6 +53,7 @@ public sealed class Program
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapAuthenticationEndpoints();
+        app.MapAccountEndpoints();
         app.MapChatEndpoints();
         app.MapChatMembershipEndpoints();
         if (app.Environment.IsDevelopment()) app.MapOpenApi().AllowAnonymous();
