@@ -45,6 +45,14 @@ foreach (var (name, run) in tests)
 
 (string Name, Func<ApiTestHost, Task> Run)[] apiTests =
 [
+    (nameof(AccountApiTests.ConcurrentDeletionsPreserveAnActiveAdministrator), AccountApiTests.ConcurrentDeletionsPreserveAnActiveAdministrator),
+    (nameof(AccountApiTests.AdministratorSuspensionRevokesSessionsAtomically), AccountApiTests.AdministratorSuspensionRevokesSessionsAtomically),
+    (nameof(AccountApiTests.AdministratorRoleIsReadFromDatabase), AccountApiTests.AdministratorRoleIsReadFromDatabase),
+    (nameof(AccountApiTests.AccountContractsRejectInvalidTransitions), AccountApiTests.AccountContractsRejectInvalidTransitions),
+    (nameof(AccountApiTests.DeletionPreservesMessagesAndRequiresOwnershipTransfer), AccountApiTests.DeletionPreservesMessagesAndRequiresOwnershipTransfer),
+    (nameof(AccountApiTests.SuspensionClosesJoinedAndIdleConnections), AccountApiTests.SuspensionClosesJoinedAndIdleConnections),
+    (nameof(AccountApiTests.ConcurrentStatusChangesCannotReviveOldTokens), AccountApiTests.ConcurrentStatusChangesCannotReviveOldTokens),
+
     (nameof(ApiContractTests.DevelopmentPublishesAuthenticatedContracts), ApiContractTests.DevelopmentPublishesAuthenticatedContracts),
     (nameof(ApiContractTests.ProductionDoesNotPublishContracts), ApiContractTests.ProductionDoesNotPublishContracts),
     (nameof(ChatMembershipRealtimeTests.RemovalRevokesEveryJoinedConnectionImmediately), ChatMembershipRealtimeTests.RemovalRevokesEveryJoinedConnectionImmediately),

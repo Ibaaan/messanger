@@ -106,8 +106,16 @@ async function startConnection() {
     } catch (error) { report(error); }
     updateSendButton();
   });
-  current.onclose(() => {
-    if (connection === current && token) status("Connection closed. Log out and log in to reconnect.");
+  current.onclose(async () => {
+    const closedToken = token;
+    if (connection === current && closedToken) {
+      status("Connection closed. Log out and log in to reconnect.");
+      try {
+        const response = await fetch("/api/users/me", { headers: { Authorization: `Bearer ${closedToken}` } });
+        if (connection === current && token === closedToken && (response.status === 401 || response.status === 403))
+          await logout("Your session was revoked or expired. Please log in again.");
+      } catch (error) { report(error); }
+    }
     updateSendButton();
   });
   await current.start();

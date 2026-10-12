@@ -7,6 +7,7 @@ internal static class RealtimeRegistration
     public static IServiceCollection AddChatRealtime(this IServiceCollection services)
     {
         services.AddSingleton<ChatSubscriptions>();
+        services.AddSingleton<AccountConnections>();
         services.AddSingleton<IUserIdProvider, SubjectUserIdProvider>();
         services.AddScoped<ChatBroadcaster>();
         services.AddSignalR(options =>

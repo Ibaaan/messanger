@@ -17,6 +17,8 @@ internal static class ApiContractTests
         var paths = root.GetProperty("paths");
         foreach (var (path, method) in new[] {
             ("/api/chats/{chatId}/members", "post"),
+            ("/api/admin/users/{userId}/status", "patch"),
+            ("/api/users/me", "delete"),
             ("/api/chats/{chatId}/members/{userId}", "delete"),
             ("/api/chats/{chatId}/ownership", "post"),
             ("/api/chats/{chatId}/members/{userId}/role", "patch"),
