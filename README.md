@@ -31,6 +31,7 @@ are enough responsibilities to make the grouping useful:
 ```text
 Messanger/
   Authentication/    HTTP endpoints, request model, Bearer validation, account access policy
+  Accounts/          Administrator status changes and self-deletion endpoints
   Chats/             User search, group creation, details, and history endpoints
   Realtime/          Authorized SignalR hub and delivery
   Http/              Error responses, exception handling, transport/origin policies
@@ -40,6 +41,7 @@ src/
   Messanger.Domain/   Entities kept flat: this small project has no competing categories
   Messanger.Application/
     Authentication/  Registration/login use cases, token/password ports, auth results
+    Accounts/        Account status/deletion workflows and safe account DTOs
     Chats/           Group workflows, membership access, and chat DTOs
     Messages/        Text send/history use cases and DTOs
     Persistence/     Repository interfaces and unit-of-work contract
@@ -180,7 +182,7 @@ All chat/search endpoints and hub connections require an active account and an a
 
 Text messages contain 1–4000 characters. The sender ID comes from the access token; clients cannot choose it. Message writes check/lock the active sender and participant rows, validate that replies belong to the same chat, and commit before notification. A failed broadcast does not delete the saved message. Clients receive `ReceiveMessage` for joined chats, `ChatUpdated` for their active chats, and `ChatCreated` when added to a new group. Delivery rechecks active membership/account status, so a stale subscription does not grant access after leaving or suspension.
 
-Connection subscription bookkeeping currently supports a single application instance. Multiple instances need shared routing/backplane coordination. Account administration, read/unread state, attachments, refresh/logout rotation, public-release rate limits, and deployment hardening remain separate tasks. The host does not mutate the schema on startup.
+Connection subscription bookkeeping currently supports a single application instance. Multiple instances need shared routing/backplane coordination. Read/unread state, attachments, refresh/logout rotation, public-release rate limits, and deployment hardening remain separate tasks. The host does not mutate the schema on startup.
 
 ## Group membership contracts
 
@@ -222,6 +224,41 @@ Events are best effort after commit; reload the chat list/history after reconnec
 coordination currently support one application instance. The API supports group administration; the plain frontend
 reacts to changes but does not yet provide membership/role management controls.
 
+## Account lifecycle
+
+Apply the new migration before running this version:
+
+```bash
+dotnet ef database update --project src/Messanger.Infrastructure
+```
+
+The migration adds `users.session_version` with default zero. Access JWTs now require a matching `session_version` claim;
+previously issued access tokens require a new login. Status changes increment this version and revoke every unrevoked
+refresh record in the same transaction. Reactivation permits a fresh login and never revives earlier tokens.
+Persistent refresh-cookie sign-in is still a separate P1 task.
+
+| Route | Body | Behavior |
+| --- | --- | --- |
+| `PATCH /api/admin/users/{userId}/status` | `{ "accountStatus": "SUSPENDED" }` or `{ "accountStatus": "ACTIVE" }` | Current active database ADMIN required; 200 safe account DTO. Cannot target yourself or restore a DELETED account. Repeating the current status is idempotent. |
+| `DELETE /api/users/me` | None | 204 soft deletion. Requires transferring owned groups first (409 `owner_transfer_required`). The last active administrator cannot delete their account (409 `account_conflict`). |
+
+Registration cannot assign ADMIN. Provision the initial administrator through a controlled database maintenance step;
+there is no public administrator bootstrap or role-assignment endpoint. Authorization checks the current stored role,
+so an old ADMIN token cannot authorize status changes after demotion. Manual role changes must also increment
+`session_version`, revoke that user's refresh records, and restart/close affected live connections; the public API does
+not currently expose role changes.
+
+Suspension/deletion closes affected SignalR connections, including idle connections and multiple tabs. The browser
+checks its session after closure and clears revoked credentials. Each hub invocation also checks the current account
+status and session version. Version-aware closure preserves newer connections if an older status-change notification
+arrives late. Live closure coordination supports one application instance; multiple instances need coordinated revocation.
+
+Deletion marks memberships departed, frees group capacity, and preserves messages for other participants. History
+returns `deleted_account` / `Deleted account` instead of the former username/display name. Identity/profile records
+remain stored for referential integrity, and the username remains reserved. This is soft deletion, not a data-erasure workflow.
+A suspended owner retains ownership and can resume managing the group after an administrator reactivates their account.
+The plain frontend has no account-administration or deletion controls yet; these routes are available through the API.
+
 ## Repository usage
 
 Register `services.AddPostgresRepositories(connectionString)`, then resolve repositories and `IUnitOfWork` from a DI
@@ -235,7 +272,7 @@ insertion also inserts a profile and normalizes the username with invariant uppe
 
 Authentication use cases live in `Application/Authentication`; password hashing and JWT issuance are implemented in
 `Infrastructure/Authentication`. The HTTP host configures token validation and wires the adapters through dependency
-injection. Chat use cases enforce active membership for reads and writes. Read-marker/unread workflows, account administration, race-safe refresh rotation, and media cleanup/outbox processing remain to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
+injection. Chat use cases enforce active membership for reads and writes. Read-marker/unread workflows, race-safe refresh rotation, and media cleanup/outbox processing remain to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
 
 ## Validation
 
@@ -246,9 +283,9 @@ dotnet build Messanger.sln
 dotnet run --project tests/Messanger.IntegrationTests
 ```
 
-The integration executable runs 45 named checks: the original seven repository scenarios plus registration, password
+The integration executable runs 52 named checks: the original seven repository scenarios plus registration, password
 hashing, concurrent username uniqueness, login, active-account authorization, JWT rejection cases, CORS, production
-HTTPS enforcement, malformed/oversized bodies, user discovery, atomic group creation, history paging, cross-chat reply rejection, membership loss, SignalR delivery, browser WebSocket authentication, new-chat notification, reconnect recovery, member add/remove/rejoin, moderator restrictions, concurrent ownership/capacity changes, multi-tab revocation, stale tracked authorization, hub validation, and Development/Production OpenAPI availability. Repository scenarios roll back their own transactions. HTTP scenarios
+HTTPS enforcement, malformed/oversized bodies, user discovery, atomic group creation, history paging, cross-chat reply rejection, membership loss, SignalR delivery, browser WebSocket authentication, new-chat notification, reconnect recovery, member add/remove/rejoin, moderator restrictions, concurrent ownership/capacity changes, multi-tab revocation, stale tracked authorization, hub validation, Development/Production OpenAPI availability, account suspension/reactivation, soft deletion, refresh-family revocation, stale administrator claims, last-administrator concurrency, and closure of joined/idle connections. Repository scenarios roll back their own transactions. HTTP scenarios
 use a generated schema in the supplied test database and a temporary RSA key; both are removed after the suite. Use a
 disposable database whose role can create/drop schemas. The test host applies migrations only to its generated schema.
 
