@@ -45,6 +45,14 @@ foreach (var (name, run) in tests)
 
 (string Name, Func<ApiTestHost, Task> Run)[] apiTests =
 [
+    (nameof(BrowserSessionTests.LoginIssuesPrivatePersistentCookieAndHashedRecord), BrowserSessionTests.LoginIssuesPrivatePersistentCookieAndHashedRecord),
+    (nameof(BrowserSessionTests.ReopeningRestoresSessionAndRotatesWithoutExtendingExpiry), BrowserSessionTests.ReopeningRestoresSessionAndRotatesWithoutExtendingExpiry),
+    (nameof(BrowserSessionTests.ReplayedTokenRevokesFamilyAndClosesLiveChat), BrowserSessionTests.ReplayedTokenRevokesFamilyAndClosesLiveChat),
+    (nameof(BrowserSessionTests.ConcurrentRefreshFailsClosedWithoutTwoSuccessors), BrowserSessionTests.ConcurrentRefreshFailsClosedWithoutTwoSuccessors),
+    (nameof(BrowserSessionTests.LogoutIsIdempotentAndRevokesOnlyItsFamily), BrowserSessionTests.LogoutIsIdempotentAndRevokesOnlyItsFamily),
+    (nameof(BrowserSessionTests.SessionEndpointsRequireCsrfProofAndSameOriginHttps), BrowserSessionTests.SessionEndpointsRequireCsrfProofAndSameOriginHttps),
+    (nameof(BrowserSessionTests.AbsoluteDeadlineCapsAccessAndNeverSlides), BrowserSessionTests.AbsoluteDeadlineCapsAccessAndNeverSlides),
+
     (nameof(AccountApiTests.ConcurrentDeletionsPreserveAnActiveAdministrator), AccountApiTests.ConcurrentDeletionsPreserveAnActiveAdministrator),
     (nameof(AccountApiTests.AdministratorSuspensionRevokesSessionsAtomically), AccountApiTests.AdministratorSuspensionRevokesSessionsAtomically),
     (nameof(AccountApiTests.AdministratorRoleIsReadFromDatabase), AccountApiTests.AdministratorRoleIsReadFromDatabase),

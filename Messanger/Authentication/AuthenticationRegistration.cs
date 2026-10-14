@@ -63,6 +63,7 @@ internal static class AuthenticationRegistration
                             || !long.TryParse(issuedAt, NumberStyles.None, CultureInfo.InvariantCulture, out _)
                             || string.IsNullOrWhiteSpace(principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value)
                             || string.IsNullOrWhiteSpace(principal.FindFirst("role")?.Value)
+                            || !Guid.TryParse(principal.FindFirst("sid")?.Value, out var family) || family == Guid.Empty
                             || !int.TryParse(principal.FindFirst("session_version")?.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var version) || version < 0)
                             context.Fail("Invalid access token.");
                         return Task.CompletedTask;

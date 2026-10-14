@@ -26,13 +26,15 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
     private readonly string adminConnectionString;
     private readonly string connectionString;
     private readonly string environment;
+    private readonly TimeProvider? clock;
     private readonly string keyDirectory;
     private readonly string schema;
 
-    private ApiTestHost(string adminConnectionString, string environment)
+    private ApiTestHost(string adminConnectionString, string environment, TimeProvider? clock)
     {
         this.adminConnectionString = adminConnectionString;
         this.environment = environment;
+        this.clock = clock;
         schema = "api_tests_" + Guid.NewGuid().ToString("N");
         connectionString = new NpgsqlConnectionStringBuilder(adminConnectionString) { SearchPath = schema }
             .ConnectionString;
@@ -43,9 +45,9 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
     public RSA SigningKey { get; } = RSA.Create(2048);
     public HttpClient Client { get; private set; } = null!;
 
-    public static async Task<ApiTestHost> CreateAsync(string connectionString, string environment = "Development")
+    public static async Task<ApiTestHost> CreateAsync(string connectionString, string environment = "Development", TimeProvider? clock = null)
     {
-        var host = new ApiTestHost(connectionString, environment);
+        var host = new ApiTestHost(connectionString, environment, clock);
         try
         {
             await using var connection = new NpgsqlConnection(connectionString);
@@ -60,6 +62,10 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
                 BaseAddress = new Uri("https://localhost"),
                 AllowAutoRedirect = false
             });
+            using var csrf = await host.Client.GetAsync("/auth/csrf");
+            csrf.EnsureSuccessStatusCode();
+            var proof = await csrf.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            host.Client.DefaultRequestHeaders.Add("X-CSRF-Token", proof.GetProperty("token").GetString());
             return host;
         }
         catch
@@ -76,6 +82,7 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
         builder.ConfigureServices(services =>
         {
             // All request scopes use the isolated schema, never the caller's application tables.
+            if (clock is not null) { services.RemoveAll<TimeProvider>(); services.AddSingleton(clock); }
             services.RemoveAll<NpgsqlDataSource>();
             services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(connectionString));
             services.PostConfigure<JwtOptions>(options =>
@@ -87,6 +94,8 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
             services.PostConfigure<HttpSecurityOptions>(options => options.AllowedOrigins = [AllowedOrigin]);
         });
     }
+
+    public Task<ApiTestHost> CreateClockHostAsync(TimeProvider clock) => CreateAsync(adminConnectionString, clock: clock);
 
     public Task<ApiTestHost> CreateProductionHostAsync()
     {
@@ -106,8 +115,8 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
 
     public async Task<LoginResponse> LoginAsync(UserResponse user)
     {
-        using var response =
-            await Client.PostAsJsonAsync("/auth/login", new { username = user.Username, password = TestPassword });
+        using var browser = await SessionBrowser.CreateAsync(this);
+        using var response = await browser.Client.PostAsJsonAsync("/auth/login", new { username = user.Username, password = TestPassword });
         TestAssert.Equal(HttpStatusCode.OK, response.StatusCode, "Login should succeed.");
         return (await response.Content.ReadFromJsonAsync<LoginResponse>())!;
     }

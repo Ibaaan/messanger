@@ -13,7 +13,7 @@ internal static class ApiContractRegistration
             {
                 document.Info.Title = "Messanger API";
                 document.Info.Version = "v1";
-                document.Info.Description = "Implemented HTTP contracts. SignalR method/event contracts are documented in README.md. Persistent cookie sign-in is planned, not implemented.";
+                document.Info.Description = "Implemented HTTP contracts. SignalR method/event contracts are documented in README.md. Browser sessions use CSRF-protected HTTPS auth endpoints and a persistent refresh cookie.";
                 document.Components ??= new OpenApiComponents();
                 document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
                 document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme

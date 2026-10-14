@@ -7,8 +7,7 @@ namespace Messanger.Application.Authentication;
 public sealed partial class AuthenticationService(
     IUserRepository users,
     IUnitOfWork unitOfWork,
-    IPasswordService passwords,
-    IAccessTokenIssuer tokens)
+    IPasswordService passwords)
 {
     public async Task<UserResponse> RegisterAsync(string? username, string? password,
         CancellationToken cancellationToken)
@@ -37,7 +36,7 @@ public sealed partial class AuthenticationService(
         return UserResponse.From(user);
     }
 
-    public async Task<LoginResponse> LoginAsync(string? username, string? password, CancellationToken cancellationToken)
+    public async Task<User> AuthenticateAsync(string? username, string? password, CancellationToken cancellationToken)
     {
         if (!IsValidUsername(username) || password is null || password.Length is < 10 or > 256)
             throw InvalidCredentials();
@@ -48,8 +47,7 @@ public sealed partial class AuthenticationService(
         if (!validPassword || user is null || user.AccountStatus != "ACTIVE")
             throw InvalidCredentials();
 
-        var token = tokens.Issue(user);
-        return new LoginResponse(token.Value, "Bearer", token.ExpiresAt, UserResponse.From(user));
+        return user;
     }
 
     private static bool IsValidUsername(string? username)

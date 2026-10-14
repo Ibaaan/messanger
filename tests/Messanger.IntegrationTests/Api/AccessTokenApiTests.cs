@@ -44,6 +44,7 @@ internal static class AccessTokenApiTests
             ("missing token id", TestJwt.Create(host, user.Id, payload => payload.Remove("jti"))),
             ("missing token use", TestJwt.Create(host, user.Id, payload => payload.Remove("token_use"))),
             ("missing role", TestJwt.Create(host, user.Id, payload => payload.Remove("role"))),
+            ("missing session family", TestJwt.Create(host, user.Id, payload => payload.Remove("sid"))),
             ("missing session version", TestJwt.Create(host, user.Id, payload => payload.Remove("session_version"))),
             ("negative session version", TestJwt.Create(host, user.Id, payload => payload["session_version"] = -1))
         ];

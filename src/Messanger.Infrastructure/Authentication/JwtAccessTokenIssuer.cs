@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using Messanger.Application;
 using Messanger.Application.Authentication;
 using Messanger.Domain;
 using Microsoft.Extensions.Options;
@@ -13,10 +14,11 @@ internal sealed class JwtAccessTokenIssuer(
     IOptions<JwtOptions> options,
     TimeProvider clock) : IAccessTokenIssuer
 {
-    public AccessToken Issue(User user)
+    public AccessToken Issue(User user, Guid familyId, DateTimeOffset deadline)
     {
         var now = clock.GetUtcNow();
-        var expiresAt = now.AddMinutes(15);
+        if (deadline <= now) throw new UseCaseException("session_expired", "Your session expired. Please log in again.");
+        var expiresAt = now.AddMinutes(15) < deadline ? now.AddMinutes(15) : deadline;
         var descriptor = new SecurityTokenDescriptor
         {
             Issuer = options.Value.Issuer,
@@ -25,6 +27,7 @@ internal sealed class JwtAccessTokenIssuer(
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString(CultureInfo.InvariantCulture)),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")),
                 new Claim("role", user.Role),
+                new Claim("sid", familyId.ToString()),
                 new Claim("session_version", user.SessionVersion.ToString(CultureInfo.InvariantCulture)),
                 new Claim("token_use", "access")
             ]),

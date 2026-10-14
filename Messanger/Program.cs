@@ -32,6 +32,7 @@ public sealed class Program
         builder.Services.AddScoped<MessageService>();
         builder.Services.AddChatRealtime();
         builder.Services.AddAccessAuthentication(builder.Configuration);
+        builder.Services.AddBrowserSessions();
         builder.Services.AddHttpSecurity(builder.Configuration, builder.Environment.IsDevelopment());
         builder.Services.AddExceptionHandler<ApiExceptionHandler>();
         builder.Services.AddProblemDetails();
@@ -53,6 +54,7 @@ public sealed class Program
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapAuthenticationEndpoints();
+        app.MapSessionEndpoints();
         app.MapAccountEndpoints();
         app.MapChatEndpoints();
         app.MapChatMembershipEndpoints();

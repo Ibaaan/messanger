@@ -15,7 +15,7 @@ internal sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) :
             UseCaseException { Code: "forbidden" } forbidden => (403, forbidden.Code, forbidden.Message),
             UseCaseException { Code: "not_found" } missing => (404, missing.Code, missing.Message),
             UseCaseException { Code: "validation_failed" } validation => (422, validation.Code, validation.Message),
-            UseCaseException { Code: "invalid_credentials" } credentials =>
+            UseCaseException { Code: "invalid_credentials" or "session_expired" } credentials =>
                 (401, credentials.Code, credentials.Message),
             UseCaseException { Code: "username_taken" or "owner_transfer_required" or "member_already_active" or "membership_conflict" or "account_conflict" } conflict =>
                 (409, conflict.Code, conflict.Message),

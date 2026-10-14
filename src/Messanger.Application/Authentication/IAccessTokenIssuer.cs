@@ -4,5 +4,5 @@ namespace Messanger.Application.Authentication;
 
 public interface IAccessTokenIssuer
 {
-    AccessToken Issue(User user);
+    AccessToken Issue(User user, Guid familyId, DateTimeOffset deadline);
 }

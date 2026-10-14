@@ -22,7 +22,8 @@ internal static class TestJwt
             ["exp"] = now.AddMinutes(15).ToUnixTimeSeconds(),
             ["role"] = "USER",
             ["token_use"] = "access",
-            ["session_version"] = 0
+            ["session_version"] = 0,
+            ["sid"] = Guid.NewGuid().ToString()
         };
         change?.Invoke(payload);
         using var otherKey = RSA.Create(2048);

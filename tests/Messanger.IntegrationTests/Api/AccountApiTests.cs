@@ -49,7 +49,9 @@ internal static class AccountApiTests
     {
         var user = await host.RegisterAsync();
         var target = await host.RegisterAsync();
-        var forgedRole = TestJwt.Create(host, user.Id, payload => payload["role"] = "ADMIN");
+        var realLogin = await host.LoginAsync(user);
+        var familyId = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(realLogin.AccessToken).Claims.Single(claim => claim.Type == "sid").Value;
+        var forgedRole = TestJwt.Create(host, user.Id, payload => { payload["role"] = "ADMIN"; payload["sid"] = familyId; });
         using var denied = await ChangeStatusAsync(host, forgedRole, target.Id, "SUSPENDED");
         await ApiAssertions.ErrorAsync(denied, HttpStatusCode.Forbidden, "forbidden");
         var (admin, token) = await CreateAdminAsync(host);

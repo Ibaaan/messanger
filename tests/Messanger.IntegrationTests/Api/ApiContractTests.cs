@@ -28,8 +28,9 @@ internal static class ApiContractTests
             TestAssert.True(operation.GetProperty("security").GetArrayLength() > 0, "Group routes require bearer auth.");
             TestAssert.True(operation.GetProperty("responses").TryGetProperty("422", out _), "Document validation errors.");
         }
-        TestAssert.True(!paths.GetProperty("/auth/login").GetProperty("post").TryGetProperty("security", out _),
-            "Login must remain anonymous.");
+        foreach (var route in new[] { "/auth/login", "/auth/refresh", "/auth/logout" })
+            TestAssert.True(!paths.GetProperty(route).GetProperty("post").TryGetProperty("security", out _),
+                "Cookie session endpoints use CSRF proof, not access Bearer authentication.");
         TestAssert.True(paths.GetProperty("/registration").GetProperty("post").GetProperty("responses").TryGetProperty("201", out _),
             "Registration documents Created.");
     }

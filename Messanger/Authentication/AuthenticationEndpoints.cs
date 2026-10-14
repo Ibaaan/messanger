@@ -20,12 +20,6 @@ internal static class AuthenticationEndpoints
                 return Results.Json(user, statusCode: StatusCodes.Status201Created);
             }).AllowAnonymous().WithTags("Authentication").WithName("Register").Produces<UserResponse>(StatusCodes.Status201Created).WithApiErrors();
 
-        endpoints.MapPost("/auth/login",
-                async (CredentialsRequest request, AuthenticationService authentication,
-                        CancellationToken cancellationToken) =>
-                    Results.Ok(await authentication.LoginAsync(request.Username, request.Password, cancellationToken)))
-            .AllowAnonymous().WithTags("Authentication").WithName("Login").Produces<LoginResponse>().WithApiErrors();
-
         // A minimal protected endpoint for the signed-in account; never returns persistence entities or hashes.
         endpoints.MapGet("/api/users/me",
             async (ClaimsPrincipal principal, IUserRepository users, CancellationToken cancellationToken) =>

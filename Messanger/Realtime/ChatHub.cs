@@ -12,18 +12,18 @@ namespace Messanger.Realtime;
 
 [Authorize]
 internal sealed class ChatHub(ChatAccessService access, MessageService messages,
-    ChatBroadcaster broadcaster, ChatSubscriptions subscriptions, AccountConnections connections, IUserRepository users) : Hub
+    ChatBroadcaster broadcaster, ChatSubscriptions subscriptions, AccountConnections connections, AccountSession session) : Hub
 {
     private long UserId => ChatEndpoints.UserId(Context.User!);
 
     public override async Task OnConnectedAsync()
     {
         await access.RequireActiveAsync(UserId, Context.ConnectionAborted);
-        connections.Connect(Context.ConnectionId, UserId, int.Parse(Context.User!.FindFirst("session_version")!.Value, CultureInfo.InvariantCulture), Context.Abort);
+        connections.Connect(Context.ConnectionId, UserId, int.Parse(Context.User!.FindFirst("session_version")!.Value, CultureInfo.InvariantCulture), Guid.Parse(Context.User.FindFirst("sid")!.Value), Context.Abort);
         try
         {
             // Recheck after registration so a status change racing connection setup cannot escape revocation.
-            if (!AccountSession.IsCurrent(await users.GetByIdAsync(UserId, Context.ConnectionAborted), Context.User!))
+            if (!await session.IsCurrentAsync(Context.User!, Context.ConnectionAborted))
                 throw new UseCaseException("forbidden", "Your session is no longer active.");
             subscriptions.Connect(Context.ConnectionId, UserId);
             await base.OnConnectedAsync();
