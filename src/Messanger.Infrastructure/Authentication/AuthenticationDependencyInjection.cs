@@ -17,6 +17,7 @@ public static class AuthenticationDependencyInjection
         services.AddSingleton<JwtSigningKey>();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IAccessTokenIssuer, JwtAccessTokenIssuer>();
+        services.AddSingleton<IRefreshTokenCodec, JwtRefreshTokenCodec>();
         services.AddSingleton<IPasswordService, IdentityPasswordService>();
         return services;
     }

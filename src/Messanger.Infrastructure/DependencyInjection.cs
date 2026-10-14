@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<IChatMembershipRepository, ChatMembershipRepository>();
         services.AddScoped<IMessageRepository, MessageRepository>();
         services.AddScoped<IRefreshTokenFamilyRepository, RefreshTokenFamilyRepository>();
+        services.AddScoped<IRefreshSessionRepository, RefreshSessionRepository>();
         return services;
     }
 }
