@@ -2,6 +2,10 @@
 
 const element = id => document.getElementById(id);
 let token = null;
+let tokenExpiresAt = 0;
+let authEpoch = 0;
+let renewal = null;
+let renewalEpoch = -1;
 let connection = null;
 let activeChatId = null;
 let generation = 0;
@@ -13,11 +17,17 @@ const selectedPeople = new Map();
 const messages = new Map();
 
 function status(message) { element("status").textContent = message; }
-function report(error) { status(error.message || "The request failed."); }
+function report(error) {
+  let message = error.message || "The request failed.";
+  if (!token && element("message-text").value && !message.includes("unsent text"))
+    message += " Your unsent text is kept in this tab until you log in again.";
+  status(message);
+}
 function connected() { return connection?.state === signalR.HubConnectionState.Connected; }
 function updateSendButton() { element("send-button").disabled = !connected() || activeChatId === null; }
 
 async function api(path, body) {
+  if (token && tokenExpiresAt - Date.now() < 10000) await renewAccess();
   const headers = {};
   if (token) headers.Authorization = "Bearer " + token;
   if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -25,14 +35,16 @@ async function api(path, body) {
     body: body === undefined ? undefined : JSON.stringify(body), cache: "no-store", credentials: "omit" });
   const result = await response.json();
   if (!response.ok) {
-    if (response.status === 401 && token) await logout("Your session expired. Please log in again.");
+    if (response.status === 401 && token) await clearSession("Your session expired. Please log in again.");
     throw new Error(result.error?.message || "The request failed.");
   }
   return result;
 }
 
-async function logout(message = "Logged out.") {
+async function clearSession(message = "Logged out.", preserveDraft = true) {
+  authEpoch++;
   token = null;
+  tokenExpiresAt = 0;
   generation++;
   clearTimeout(expiryTimer);
   clearTimeout(refreshTimer);
@@ -48,16 +60,76 @@ async function logout(message = "Logged out.") {
   element("signed-in").hidden = true;
   element("signed-out").hidden = false;
   element("password").value = "";
-  element("message-text").value = "";
+  if (!preserveDraft) element("message-text").value = "";
+  else if (element("message-text").value) message += " Your unsent text is kept in this tab until you log in again.";
   showSelectedPeople();
   updateSendButton();
   status(message);
   if (previous) await previous.stop();
 }
 
+async function logout() {
+  authEpoch++;
+  await browserSessions.logout();
+  await clearSession("Logged out.", false);
+}
+
+function applySession(session) {
+  token = session.accessToken;
+  tokenExpiresAt = Date.parse(session.expiresAt);
+  element("current-user").textContent = session.user.username;
+  element("password").value = "";
+  element("signed-out").hidden = true;
+  element("signed-in").hidden = false;
+  clearTimeout(expiryTimer);
+  const remaining = tokenExpiresAt - Date.now();
+  expiryTimer = setTimeout(() => renewAccess().catch(report), Math.max(1000, remaining > 60000 ? remaining - 60000 : remaining));
+}
+
+async function renewAccess() {
+  const epoch = authEpoch;
+  if (renewal && renewalEpoch === epoch) return renewal;
+  const work = (async () => {
+    try {
+      const session = await browserSessions.refresh();
+      if (epoch !== authEpoch) throw new Error("Session changed. Please try again.");
+      applySession(session);
+    } catch (error) {
+      if (epoch === authEpoch && (error.status === 401 || error.status === 403)) await clearSession(error.message);
+      throw error;
+    }
+  })();
+  renewal = work;
+  renewalEpoch = epoch;
+  try { await work; } finally { if (renewal === work) renewal = null; }
+}
+
+async function restoreSession() {
+  element("account-fields").disabled = true;
+  try {
+    await renewAccess();
+    await startConnection();
+    await refreshChats();
+    status("Session restored. Select a chat.");
+  } catch (error) {
+    if (error.status !== 401) report(error);
+  } finally { element("account-fields").disabled = false; }
+}
+
+browserSessions.onChange(async change => {
+  if (change === "logout") await clearSession("Logged out in another tab.", false);
+  else if (change === "changed") {
+    await clearSession("Account changed in another tab.");
+    await restoreSession();
+  }
+});
+
 async function startConnection() {
   const current = new signalR.HubConnectionBuilder()
-    .withUrl("/hubs/chat", { accessTokenFactory: () => token || "", withCredentials: false })
+    .withUrl("/hubs/chat", { accessTokenFactory: async () => {
+      if (token && tokenExpiresAt - Date.now() < 10000) await renewAccess();
+      return token || "";
+    }, withCredentials: false })
     .withAutomaticReconnect([0, 2000, 5000, 10000]).build();
   connection = current;
   current.on("ReceiveMessage", message => {
@@ -107,15 +179,15 @@ async function startConnection() {
     updateSendButton();
   });
   current.onclose(async () => {
-    const closedToken = token;
-    if (connection === current && closedToken) {
-      status("Connection closed. Log out and log in to reconnect.");
-      try {
-        const response = await fetch("/api/users/me", { headers: { Authorization: `Bearer ${closedToken}` } });
-        if (connection === current && token === closedToken && (response.status === 401 || response.status === 403))
-          await logout("Your session was revoked or expired. Please log in again.");
-      } catch (error) { report(error); }
-    }
+    if (connection !== current || !token) return;
+    try {
+      await renewAccess();
+      if (connection !== current || !token) return;
+      const chatId = activeChatId;
+      await startConnection();
+      await refreshChats();
+      if (chatId !== null) await openChat(chatId);
+    } catch (error) { report(error); }
     updateSendButton();
   });
   await current.start();
@@ -128,19 +200,14 @@ element("account-form").addEventListener("submit", async event => {
   try {
     const credentials = { username: element("username").value, password: element("password").value };
     if (event.submitter?.value === "register") await api("/registration", credentials);
-    const login = await api("/auth/login", credentials);
-    token = login.accessToken;
-    element("password").value = "";
-    element("current-user").textContent = login.user.username;
-    element("signed-out").hidden = true;
-    element("signed-in").hidden = false;
-    expiryTimer = setTimeout(() => logout("Your session expired. Please log in again.").catch(report),
-      Math.max(0, Date.parse(login.expiresAt) - Date.now()));
+    authEpoch++;
+    const login = await browserSessions.login(credentials);
+    applySession(login);
     await startConnection();
     await refreshChats();
     status("Connected. Select a chat or create a group.");
   } catch (error) {
-    await logout(error.message || "Login failed.");
+    await clearSession(error.message || "Login failed.");
   } finally { element("account-fields").disabled = false; }
 });
 element("logout").addEventListener("click", () => logout().catch(report));
@@ -192,9 +259,9 @@ element("create-form").addEventListener("submit", async event => {
 });
 
 async function refreshChats() {
-  const session = token;
+  const session = authEpoch;
   const chats = await api("/api/chats");
-  if (!session || token !== session) return;
+  if (!token || authEpoch !== session) return;
   element("chats").replaceChildren();
   for (const chat of chats) {
     const item = document.createElement("li");
@@ -284,3 +351,5 @@ element("message-form").addEventListener("submit", async event => {
   } catch (error) { report(error); }
   finally { updateSendButton(); }
 });
+
+restoreSession().catch(report);

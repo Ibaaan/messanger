@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Messanger</title>
   <script src="/lib/signalr/signalr.min.js" defer></script>
+  <script src="/session.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -24,7 +25,7 @@
   </section>
   <main id="signed-in" hidden>
     <p>Signed in as <strong id="current-user"></strong>. <button id="logout" type="button">Log out</button></p>
-    <p>Tokens stay in this tab's memory. Reloading the page requires a new login.</p>
+    <p>Sign-in survives reloads for up to 30 days. Log out to end this browser session.</p>
     <section>
       <h2>Create a group</h2>
       <form id="search-form">
