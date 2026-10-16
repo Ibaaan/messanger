@@ -96,12 +96,13 @@ mkdir -p .local
 # Generate this key once, keeping an existing key on later runs.
 (umask 077; test -f .local/jwt-signing.pem || openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out .local/jwt-signing.pem)
 dotnet user-secrets set "Jwt:PrivateKeyPath" "$(pwd)/.local/jwt-signing.pem" --project Messanger
+dotnet dev-certs https --trust
 dotnet run --project Messanger --launch-profile Local
 ```
 
-Match the connection string to your `.env` database, username, password, and mapped port. Start PostgreSQL with `docker compose up -d --wait` and apply the explicit EF migration command above first. Select the **Local** launch profile when running from an IDE; it sets Development mode, port 5100, and the matching browser origin. Open `http://localhost:5100/`.
+Match the connection string to your `.env` database, username, password, and mapped port. Start PostgreSQL with `docker compose up -d --wait` and apply the explicit EF migration command above first. Select the **Local** launch profile when running from an IDE; it sets Development mode, HTTPS port 7100, and the matching browser origin. Open `https://localhost:7100/`.
 
-User secrets live outside Git and load only in Development; `.local/` is ignored and contains only the local signing key. Existing environment variables override user secrets, so remove stale overrides if you change configuration. Production still requires explicit connection/signing configuration and HTTPS. The HTTPS/manual-environment setup below remains available.
+User secrets live outside Git and load only in Development; `.local/` is ignored and contains only the local signing key. Existing environment variables override user secrets, so remove stale overrides if you change configuration. Production still requires explicit connection/signing configuration and HTTPS. Persistent sign-in requires HTTPS in Development too; HTTP authentication requests are rejected.
 
 ## Run the app
 
@@ -131,7 +132,7 @@ tooling. HTTP bodies and SignalR messages are limited to 16 KiB. Tokens in query
 | Endpoint             | Access                         | Result                                                                                                                                                       |
 |----------------------|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `POST /registration` | Public                         | Validates username/password and atomically creates an active user plus profile; returns 201, or 409 for a duplicate username.                                |
-| `POST /auth/login`   | Public                         | Returns an RS256 access token, Bearer token type, expiry, and safe user fields. Invalid credentials and inactive accounts return the same generic 401 error. |
+| `POST /auth/login` | HTTPS + CSRF proof | Returns an access token and safe user fields; sets the persistent refresh cookie. Invalid credentials/inactive accounts return generic 401. |
 | `GET /api/users/me`  | Active account + access Bearer | Returns the signed-in user's ID, username, role, and language.                                                                                               |
 
 Registration/login bodies are `{ "username": "alice", "password": "a long passphrase" }`. Usernames contain 3–20 ASCII
@@ -143,7 +144,10 @@ For a self-signed local development certificate only, `curl -k` can exercise the
 
 ```bash
 curl -k https://localhost:7100/registration -H 'Content-Type: application/json' -d '{"username":"alice","password":"a long passphrase"}'
-curl -k https://localhost:7100/auth/login -H 'Content-Type: application/json' -d '{"username":"alice","password":"a long passphrase"}'
+# Keep this private cookie jar outside the repository.
+umask 077
+CSRF_TOKEN=$(curl -ks -c /tmp/messanger.cookies https://localhost:7100/auth/csrf | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+curl -k -b /tmp/messanger.cookies -c /tmp/messanger.cookies https://localhost:7100/auth/login -H "X-CSRF-Token: $CSRF_TOKEN" -H 'Content-Type: application/json' -d '{"username":"alice","password":"a long passphrase"}'
 # Copy accessToken from the login response into ACCESS_TOKEN in the same terminal.
 curl -k https://localhost:7100/api/users/me -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
@@ -157,15 +161,15 @@ requests also check the current account status in PostgreSQL. Responses use `Cac
 
 Open `https://localhost:7100/` after starting the app above. There is no CSS, frontend framework, build step, or runtime CDN dependency. The official SignalR JavaScript client and its license are checked into `wwwroot/lib/signalr`.
 
-1. Open two tabs. Register/log in as a different user in each tab.
-2. In the first tab, search for the second user's username, select them, enter a group name, and create the group.
+1. Open two separate browser profiles, or a normal and a private window. Register/log in as a different user in each. Tabs within one browser profile share the same persistent session.
+2. In the first window, search for the second user's username, select them, enter a group name, and create the group.
 3. The second user sees the group appear live. Open it in both tabs and send text messages.
 4. The latest 50 messages load in chronological order. Use **Load older messages** for earlier pages.
-5. Temporary disconnects trigger reconnect attempts and reload the latest history. Reloading the page clears the in-memory token and requires login again; saved messages remain in PostgreSQL.
+5. Temporary disconnects trigger reconnect attempts and reload the latest history. Reloading or reopening the browser restores the session from the refresh cookie until logout, revocation, or the original 30-day deadline.
 
-The UI renders all user-provided text with `textContent`. It merges live messages and history by message ID, so the sender's acknowledgement and broadcast do not create duplicates. It clears the session when the 15-minute access token expires. **Log out** clears this tab's memory/connection; server-side logout/refresh-family rotation remains P1.
+The UI renders all user-provided text with `textContent`. It merges live messages and history by message ID, so the sender's acknowledgement and broadcast do not create duplicates. Access tokens renew automatically before expiry and remain in memory. **Log out** revokes this browser's refresh family, clears its cookie, and closes its live connections across tabs. Unsent text is kept in memory with an explanation if the session expires.
 
-For local HTTP testing only, keep `ASPNETCORE_ENVIRONMENT=Development` and set both `ASPNETCORE_URLS` and `HttpSecurity__AllowedOrigins__0` to `http://localhost:5100`. Production requires HTTPS. The configured allowed origin must exactly match the URL used by the browser, including its port.
+Use the HTTPS Local launch profile and trust the development certificate in your browser. All cookie session endpoints require HTTPS, including in Development. The configured allowed origin must exactly match the URL used by the browser, including its port.
 
 ## Chat API and live messages
 
@@ -182,7 +186,7 @@ All chat/search endpoints and hub connections require an active account and an a
 
 Text messages contain 1–4000 characters. The sender ID comes from the access token; clients cannot choose it. Message writes check/lock the active sender and participant rows, validate that replies belong to the same chat, and commit before notification. A failed broadcast does not delete the saved message. Clients receive `ReceiveMessage` for joined chats, `ChatUpdated` for their active chats, and `ChatCreated` when added to a new group. Delivery rechecks active membership/account status, so a stale subscription does not grant access after leaving or suspension.
 
-Connection subscription bookkeeping currently supports a single application instance. Multiple instances need shared routing/backplane coordination. Read/unread state, attachments, refresh/logout rotation, public-release rate limits, and deployment hardening remain separate tasks. The host does not mutate the schema on startup.
+Connection subscription bookkeeping currently supports a single application instance. Multiple instances need shared routing/backplane coordination. Read/unread state, attachments, public-release rate limits, and deployment hardening remain separate tasks. The host does not mutate the schema on startup.
 
 ## Group membership contracts
 
@@ -235,7 +239,7 @@ dotnet ef database update --project src/Messanger.Infrastructure
 The migration adds `users.session_version` with default zero. Access JWTs now require a matching `session_version` claim;
 previously issued access tokens require a new login. Status changes increment this version and revoke every unrevoked
 refresh record in the same transaction. Reactivation permits a fresh login and never revives earlier tokens.
-Persistent refresh-cookie sign-in is still a separate P1 task.
+Persistent refresh-cookie sign-in is implemented as described below.
 
 | Route | Body | Behavior |
 | --- | --- | --- |
@@ -259,6 +263,46 @@ remain stored for referential integrity, and the username remains reserved. This
 A suspended owner retains ownership and can resume managing the group after an administrator reactivates their account.
 The plain frontend has no account-administration or deletion controls yet; these routes are available through the API.
 
+## Persistent browser sessions
+
+The frontend and session endpoints run on the same HTTPS origin. Cross-origin credentialed sessions are deliberately
+unsupported; CORS for bearer APIs stays without credentials. The Local profile uses `https://localhost:7100/`.
+Run `dotnet dev-certs https --trust` and complete your browser's local certificate setup yourself if prompted.
+
+| Endpoint | Contract |
+| --- | --- |
+| `GET /auth/csrf` | Anonymous HTTPS bootstrap. Sets the HttpOnly/Secure `__Host-MessangerCsrf` cookie and returns `{ "token": "..." }`; no-store. |
+| `POST /auth/login` | Credentials JSON plus `X-CSRF-Token`; returns access/user JSON and sets the refresh cookie. A successful login replaces/revokes the browser's previous family. |
+| `POST /auth/refresh` | Refresh cookie plus `X-CSRF-Token`; atomically consumes the old token, sets its successor cookie, and returns access/user JSON. |
+| `POST /auth/logout` | Refresh cookie plus `X-CSRF-Token`; idempotently revokes that family, clears its cookie, and closes that family's live connections. Other browser/device families remain active. |
+
+Bootstrap and session requests omit Authorization headers. Supply the CSRF cookie and returned request token together.
+Session requests reject cross-site fetches and Origin headers differing from the exact HTTPS request origin, in addition
+to the application's origin allowlist. Missing/invalid CSRF proof returns 403 `csrf_failed`; invalid/expired/revoked refresh
+credentials return 401 `session_expired`. CSRF failures do not rotate or clear a valid session. Raw refresh tokens are
+never accepted in JSON/Bearer inputs and never appear in JSON responses or browser storage.
+
+The host-only `__Secure-MessangerRefresh` cookie has `HttpOnly; Secure; SameSite=Strict; Path=/auth` and persistent
+Expires/Max-Age capped at 30 days from login. Refresh JWTs use RS256, `rt+jwt`, `token_use=refresh`, and the access
+audience suffixed with `:refresh`. Only SHA256 hashes of random token identifiers are stored. All successors retain the
+original deadline, and access expiry is capped at that deadline too. No additional schema migration is needed for rotation.
+Access tokens carry `sid`; HTTP authorization and each hub invocation check that the family is still active in PostgreSQL.
+Earlier access tokens without `sid` require a fresh login after this update.
+
+Rotation/logout serialize on the user row, using the same lock order as account status changes. A consumed token replay
+revokes its whole family, including a successor already returned to another caller. There is no replay grace window:
+concurrent raw HTTP refresh requests using the same cookie fail closed (one rotation, followed by family revocation).
+The frontend prevents normal tab collisions with a same-origin Web Lock covering CSRF bootstrap and cookie mutation,
+plus one in-flight renewal per tab. It requires a browser with Web Locks support. BroadcastChannel propagates explicit
+logout/account changes without storing tokens; each tab refreshes its own in-memory access token from the shared cookie.
+A lost rotation response requires a fresh login if the old cookie is subsequently replayed.
+
+Five JavaScript tests cover restoration/renewal, draft retention, cross-tab logout, account-change races, and tab locking.
+The real-browser reload/new-tab/logout flow was manually confirmed by the user over HTTPS. Server tests model reopening
+with a fresh client sharing only cookies. Password changes and expired refresh-record cleanup remain separate work.
+Production must persist/protect ASP.NET Core Data Protection keys for CSRF cookies across restarts/instances and
+coordinate live revocation across application instances; live connection bookkeeping still supports one instance.
+
 ## Repository usage
 
 Register `services.AddPostgresRepositories(connectionString)`, then resolve repositories and `IUnitOfWork` from a DI
@@ -272,7 +316,7 @@ insertion also inserts a profile and normalizes the username with invariant uppe
 
 Authentication use cases live in `Application/Authentication`; password hashing and JWT issuance are implemented in
 `Infrastructure/Authentication`. The HTTP host configures token validation and wires the adapters through dependency
-injection. Chat use cases enforce active membership for reads and writes. Read-marker/unread workflows, race-safe refresh rotation, and media cleanup/outbox processing remain to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
+injection. Chat use cases enforce active membership for reads and writes. Read-marker/unread workflows, password changes, and media cleanup/outbox processing remain to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
 
 ## Validation
 
@@ -281,11 +325,12 @@ Against a migrated disposable PostgreSQL database:
 ```bash
 dotnet build Messanger.sln
 dotnet run --project tests/Messanger.IntegrationTests
+node tests/browser/session.test.cjs
 ```
 
-The integration executable runs 52 named checks: the original seven repository scenarios plus registration, password
+The integration executable runs 59 named checks: the original seven repository scenarios plus registration, password
 hashing, concurrent username uniqueness, login, active-account authorization, JWT rejection cases, CORS, production
-HTTPS enforcement, malformed/oversized bodies, user discovery, atomic group creation, history paging, cross-chat reply rejection, membership loss, SignalR delivery, browser WebSocket authentication, new-chat notification, reconnect recovery, member add/remove/rejoin, moderator restrictions, concurrent ownership/capacity changes, multi-tab revocation, stale tracked authorization, hub validation, Development/Production OpenAPI availability, account suspension/reactivation, soft deletion, refresh-family revocation, stale administrator claims, last-administrator concurrency, and closure of joined/idle connections. Repository scenarios roll back their own transactions. HTTP scenarios
+HTTPS enforcement, malformed/oversized bodies, user discovery, atomic group creation, history paging, cross-chat reply rejection, membership loss, SignalR delivery, browser WebSocket authentication, new-chat notification, reconnect recovery, member add/remove/rejoin, moderator restrictions, concurrent ownership/capacity changes, multi-tab revocation, stale tracked authorization, hub validation, Development/Production OpenAPI availability, account suspension/reactivation, soft deletion, refresh-family revocation, stale administrator claims, last-administrator concurrency, and closure of joined/idle connections, secure refresh cookies, reload restoration, rotation/replay/concurrency, family-scoped logout, CSRF, and absolute session expiry. Repository scenarios roll back their own transactions. HTTP scenarios
 use a generated schema in the supplied test database and a temporary RSA key; both are removed after the suite. Use a
 disposable database whose role can create/drop schemas. The test host applies migrations only to its generated schema.
 
