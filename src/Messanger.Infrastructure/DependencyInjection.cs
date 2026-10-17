@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IChatRepository, ChatRepository>();
         services.AddScoped<IChatMembershipRepository, ChatMembershipRepository>();
+        services.AddScoped<IChatReadRepository, ChatReadRepository>();
         services.AddScoped<IMessageRepository, MessageRepository>();
         services.AddScoped<IRefreshTokenFamilyRepository, RefreshTokenFamilyRepository>();
         services.AddScoped<IRefreshSessionRepository, RefreshSessionRepository>();
