@@ -45,6 +45,14 @@ foreach (var (name, run) in tests)
 
 (string Name, Func<ApiTestHost, Task> Run)[] apiTests =
 [
+    (nameof(ChatReadTests.UnreadCountsIncludeOwnMessagesAndFetchingDoesNotMarkRead), ChatReadTests.UnreadCountsIncludeOwnMessagesAndFetchingDoesNotMarkRead),
+    (nameof(ChatReadTests.ReadMarkersAreMonotonicAndNoOpsKeepTheirTimestamp), ChatReadTests.ReadMarkersAreMonotonicAndNoOpsKeepTheirTimestamp),
+    (nameof(ChatReadTests.ReadContractsRejectInvalidMessagesAndOutsiders), ChatReadTests.ReadContractsRejectInvalidMessagesAndOutsiders),
+    (nameof(ChatReadTests.ConcurrentTabsCreateOneMarkerAtTheGreatestReadId), ChatReadTests.ConcurrentTabsCreateOneMarkerAtTheGreatestReadId),
+    (nameof(ChatReadTests.LiveSummariesArePersonalizedAndReadChangesReachEveryReaderTab), ChatReadTests.LiveSummariesArePersonalizedAndReadChangesReachEveryReaderTab),
+    (nameof(ChatReadTests.RejoiningRetainsReadProgressAndCountsMessagesSentWhileAway), ChatReadTests.RejoiningRetainsReadProgressAndCountsMessagesSentWhileAway),
+    (nameof(ChatReadTests.RepositoryRechecksAccessAfterRemovalOrSuspension), ChatReadTests.RepositoryRechecksAccessAfterRemovalOrSuspension),
+
     (nameof(BrowserSessionTests.LoginIssuesPrivatePersistentCookieAndHashedRecord), BrowserSessionTests.LoginIssuesPrivatePersistentCookieAndHashedRecord),
     (nameof(BrowserSessionTests.ReopeningRestoresSessionAndRotatesWithoutExtendingExpiry), BrowserSessionTests.ReopeningRestoresSessionAndRotatesWithoutExtendingExpiry),
     (nameof(BrowserSessionTests.ReplayedTokenRevokesFamilyAndClosesLiveChat), BrowserSessionTests.ReplayedTokenRevokesFamilyAndClosesLiveChat),

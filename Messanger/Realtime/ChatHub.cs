@@ -12,7 +12,7 @@ namespace Messanger.Realtime;
 
 [Authorize]
 internal sealed class ChatHub(ChatAccessService access, MessageService messages,
-    ChatBroadcaster broadcaster, ChatSubscriptions subscriptions, AccountConnections connections, AccountSession session) : Hub
+    ChatReadService reads, ChatBroadcaster broadcaster, ChatSubscriptions subscriptions, AccountConnections connections, AccountSession session) : Hub
 {
     private long UserId => ChatEndpoints.UserId(Context.User!);
 
@@ -70,6 +70,13 @@ internal sealed class ChatHub(ChatAccessService access, MessageService messages,
         await access.RequireActiveAsync(UserId, Context.ConnectionAborted);
         subscriptions.Leave(Context.ConnectionId, chatId);
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"chat:{chatId}", Context.ConnectionAborted);
+    }
+
+    public async Task<ChatReadState> MarkRead(long chatId, long messageId)
+    {
+        var state = await reads.MarkReadAsync(chatId, UserId, messageId, Context.ConnectionAborted);
+        await broadcaster.ReadAsync(state.ChatId, UserId, Context.ConnectionAborted);
+        return state;
     }
 
     public Task<MessageResponse> SendMessage(long chatId, string? text) => SendAsync(chatId, text, null);

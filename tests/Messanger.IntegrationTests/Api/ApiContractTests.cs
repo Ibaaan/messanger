@@ -14,6 +14,9 @@ internal static class ApiContractTests
         var root = document.RootElement;
         TestAssert.Equal("bearer", root.GetProperty("components").GetProperty("securitySchemes")
             .GetProperty("Bearer").GetProperty("scheme").GetString()!, "Document JWT authentication.");
+        var chatProperties = root.GetProperty("components").GetProperty("schemas").GetProperty("ChatResponse").GetProperty("properties");
+        TestAssert.True(chatProperties.TryGetProperty("unreadCount", out _) && chatProperties.TryGetProperty("lastReadMessageId", out _),
+            "Chat contracts must describe personalized unread state.");
         var paths = root.GetProperty("paths");
         foreach (var (path, method) in new[] {
             ("/api/chats/{chatId}/members", "post"),

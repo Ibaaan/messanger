@@ -29,6 +29,7 @@ public sealed class Program
         builder.Services.AddScoped<ChatAccessService>();
         builder.Services.AddScoped<ChatService>();
         builder.Services.AddScoped<ChatMembershipService>();
+        builder.Services.AddScoped<ChatReadService>();
         builder.Services.AddScoped<MessageService>();
         builder.Services.AddChatRealtime();
         builder.Services.AddAccessAuthentication(builder.Configuration);
