@@ -13,6 +13,10 @@ let expiryTimer = null;
 let refreshTimer = null;
 let oldestCursor = null;
 let loadingOlder = false;
+let chatListRequest = 0;
+let readFrame = null;
+let readOperation = null;
+const readMarkers = new Map();
 const selectedPeople = new Map();
 const messages = new Map();
 
@@ -53,6 +57,10 @@ async function clearSession(message = "Logged out.", preserveDraft = true) {
   activeChatId = null;
   messages.clear();
   selectedPeople.clear();
+  readMarkers.clear();
+  if (readFrame !== null) cancelAnimationFrame(readFrame);
+  readFrame = null;
+  readOperation = null;
   element("search-results").replaceChildren();
   element("chats").replaceChildren();
   element("messages").replaceChildren();
@@ -259,15 +267,17 @@ element("create-form").addEventListener("submit", async event => {
 });
 
 async function refreshChats() {
+  const request = ++chatListRequest;
   const session = authEpoch;
   const chats = await api("/api/chats");
-  if (!token || authEpoch !== session) return;
+  if (!token || authEpoch !== session || request !== chatListRequest) return;
   element("chats").replaceChildren();
   for (const chat of chats) {
     const item = document.createElement("li");
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = chat.name + (chat.lastMessage ? " — " + chat.lastMessage.senderUsername + ": " + chat.lastMessage.text.slice(0, 60) : "");
+    rememberRead(chat.id, chat.lastReadMessageId);
+    button.textContent = chat.name + (chat.unreadCount ? " (" + chat.unreadCount + " unread)" : "") + (chat.lastMessage ? " — " + chat.lastMessage.senderUsername + ": " + chat.lastMessage.text.slice(0, 60) : "");
     button.addEventListener("click", () => openChat(chat.id).catch(report));
     item.append(button);
     element("chats").append(item);
@@ -294,6 +304,7 @@ async function openChat(chatId) {
     if (requestGeneration !== generation) return;
     element("conversation-name").textContent = details.chat.name;
     element("members").textContent = "Members: " + details.chat.participants.map(user => user.username).join(", ");
+    rememberRead(chatId, details.chat.lastReadMessageId);
     oldestCursor = details.messages[0]?.id ?? null;
     element("older").disabled = details.messages.length < 50;
     addMessages(details.messages);
@@ -320,7 +331,45 @@ function addMessages(items) {
     fragment.append(item);
   }
   element("messages").replaceChildren(fragment);
+  queueMarkRead();
 }
+
+function rememberRead(chatId, messageId) {
+  const key = String(chatId);
+  readMarkers.set(key, Math.max(readMarkers.get(key) || 0, messageId || 0));
+}
+
+function queueMarkRead() {
+  if (readFrame !== null) return;
+  // Wait until rendered, then recheck focus/selection. Background tabs never acknowledge unseen messages.
+  readFrame = requestAnimationFrame(async () => {
+    readFrame = null;
+    if (readOperation || !connected() || activeChatId === null || document.visibilityState !== "visible"
+        || !document.hasFocus() || element("conversation").hidden) return;
+    let newest = 0;
+    for (const message of messages.values()) newest = Math.max(newest, message.id);
+    const chatId = activeChatId;
+    if (newest <= (readMarkers.get(String(chatId)) || 0)) return;
+    const operation = { connection, epoch: authEpoch };
+    readOperation = operation;
+    let succeeded = false;
+    try {
+      const state = await operation.connection.invoke("MarkRead", chatId, newest);
+      if (connection !== operation.connection || authEpoch !== operation.epoch) return;
+      rememberRead(chatId, state.lastReadMessageId);
+      succeeded = true;
+      await refreshChats();
+    } catch (error) {
+      if (connection === operation.connection && authEpoch === operation.epoch) report(error);
+    } finally {
+      if (readOperation === operation) readOperation = null;
+      if (succeeded) queueMarkRead();
+    }
+  });
+}
+
+document.addEventListener("visibilitychange", queueMarkRead);
+window.addEventListener("focus", queueMarkRead);
 element("older").addEventListener("click", async () => {
   if (loadingOlder || oldestCursor === null || activeChatId === null) return;
   const requestGeneration = generation;

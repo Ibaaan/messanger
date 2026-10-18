@@ -1,55 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const vm = require('node:vm');
-const path = require('node:path');
-const root = path.resolve(__dirname, '../..');
-const source = name => fs.readFileSync(path.join(root, 'Messanger/wwwroot', name), 'utf8');
-const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
-const session = (user = 'alice', token = 'access-a') => ({
-  user: { username: user }, accessToken: token, expiresAt: new Date(Date.now() + 900000).toISOString()
-});
-
-function page(refresh = async () => session()) {
-  const elements = new Map();
-  const timers = new Map();
-  let nextTimer = 0;
-  let changed;
-  let logouts = 0;
-  const connections = [];
-  function element(id) {
-    if (!elements.has(id)) elements.set(id, {
-      value: '', hidden: false, textContent: '', disabled: false, listeners: {},
-      addEventListener(name, callback) { this.listeners[name] = callback; }, replaceChildren() {}
-    });
-    return elements.get(id);
-  }
-  class Hub {
-    constructor() { this.state = 'Disconnected'; connections.push(this); }
-    on() {}
-    onreconnecting(callback) { this.reconnecting = callback; }
-    onreconnected(callback) { this.reconnected = callback; }
-    onclose(callback) { this.closed = callback; }
-    async start() { this.state = 'Connected'; }
-    async stop() { this.state = 'Disconnected'; if (this.closed) await this.closed(); }
-  }
-  class Builder {
-    withUrl() { return this; } withAutomaticReconnect() { return this; } build() { return new Hub(); }
-  }
-  const context = vm.createContext({
-    document: { getElementById: element }, console, Date,
-    setTimeout(callback) { timers.set(++nextTimer, callback); return nextTimer; },
-    clearTimeout(id) { timers.delete(id); },
-    signalR: { HubConnectionBuilder: Builder, HubConnectionState: { Connected: 'Connected' } },
-    browserSessions: {
-      refresh: () => refresh(), login: async () => session(), logout: async () => { logouts++; },
-      onChange(callback) { changed = callback; }
-    },
-    fetch: async () => ({ ok: true, json: async () => [] })
-  });
-  vm.runInContext(source('app.js'), context);
-  return { context, element, timers, connections, change: value => changed(value), logouts: () => logouts };
-}
+const { page, settle, session, source } = require('./support/page.cjs');
 
 test('page load restores identity and renews access without recreating the live connection', async () => {
   let requests = 0;
