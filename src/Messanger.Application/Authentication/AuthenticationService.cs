@@ -15,9 +15,7 @@ public sealed partial class AuthenticationService(
         if (!IsValidUsername(username))
             throw new UseCaseException("validation_failed",
                 "Username must contain 3–20 ASCII letters, digits, or underscores.");
-        if (password is null || password.Length is < 10 or > 256 || string.IsNullOrWhiteSpace(password))
-            throw new UseCaseException("validation_failed",
-                "Password must contain 10–256 characters and cannot be all whitespace.");
+        password = PasswordRules.Validate(password);
         if (await users.GetByUsernameAsync(username!, cancellationToken) is not null)
             throw new UseCaseException("username_taken", "Username is already taken.");
 

@@ -27,6 +27,24 @@ internal sealed class AccountRepository(MessangerDbContext db, TimeProvider cloc
         return new AccountStatusChange(new AccountResponse(target.Id, target.Username, target.Role, target.AccountStatus), target.SessionVersion);
     }
 
+    public async Task<int> ChangePasswordAsync(long userId, int expectedSessionVersion, string expectedPasswordHash,
+        string replacementPasswordHash, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        // PostgreSQL rechecks the predicate after waiting for a concurrent update. A stale verification cannot win twice.
+        var changed = await db.Users.Where(user => user.Id == userId && user.AccountStatus == "ACTIVE"
+                && user.SessionVersion == expectedSessionVersion && user.PasswordHash == expectedPasswordHash)
+            .ExecuteUpdateAsync(update => update.SetProperty(user => user.PasswordHash, replacementPasswordHash)
+                .SetProperty(user => user.SessionVersion, user => user.SessionVersion + 1), ct);
+        if (changed != 1)
+            throw new UseCaseException("account_conflict", "Your account changed. Sign in again before changing your password.");
+        // The user row remains locked until commit, serializing this against refresh and account lifecycle changes.
+        await db.RefreshTokens.Where(token => token.UserId == userId && token.RevokedAt == null)
+            .ExecuteUpdateAsync(update => update.SetProperty(token => token.RevokedAt, clock.GetUtcNow()), ct);
+        await transaction.CommitAsync(ct);
+        return expectedSessionVersion + 1;
+    }
+
     public async Task DeleteSelfAsync(long userId, CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
