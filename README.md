@@ -182,11 +182,11 @@ All chat/search endpoints and hub connections require an active account and an a
 | `GET /api/chats` | Caller’s active groups, members, and latest message summaries. |
 | `GET /api/chats/{chatId}` | Membership-protected group details plus the latest 50 messages. |
 | `GET /api/chats/{chatId}/messages?beforeMessageId=100&limit=50` | Membership-protected chronological history; maximum page size 50, exclusive ID cursor. |
-| `/hubs/chat` | SignalR `JoinChat(chatId)`, `LeaveChat(chatId)`, `SendMessage(chatId,text)`, and `SendReply(chatId,text,replyToMessageId)`. |
+| `/hubs/chat` | SignalR `JoinChat(chatId)`, `LeaveChat(chatId)`, `SendMessage(chatId,text)`, `SendReply(chatId,text,replyToMessageId)`, and `MarkRead(chatId,messageId)`. |
 
 Text messages contain 1–4000 characters. The sender ID comes from the access token; clients cannot choose it. Message writes check/lock the active sender and participant rows, validate that replies belong to the same chat, and commit before notification. A failed broadcast does not delete the saved message. Clients receive `ReceiveMessage` for joined chats, `ChatUpdated` for their active chats, and `ChatCreated` when added to a new group. Delivery rechecks active membership/account status, so a stale subscription does not grant access after leaving or suspension.
 
-Connection subscription bookkeeping currently supports a single application instance. Multiple instances need shared routing/backplane coordination. Read/unread state, attachments, public-release rate limits, and deployment hardening remain separate tasks. The host does not mutate the schema on startup.
+Connection subscription bookkeeping currently supports a single application instance. Multiple instances need shared routing/backplane coordination. Attachments, public-release rate limits, and deployment hardening remain separate tasks. The host does not mutate the schema on startup.
 
 ## Group membership contracts
 
@@ -303,6 +303,51 @@ with a fresh client sharing only cookies. Password changes and expired refresh-r
 Production must persist/protect ASP.NET Core Data Protection keys for CSRF cookies across restarts/instances and
 coordinate live revocation across application instances; live connection bookkeeping still supports one instance.
 
+## Read markers and unread counts
+
+`GET /api/chats` and `GET /api/chats/{chatId}` include `unreadCount` and `lastReadMessageId` for the caller.
+Fetching a list, details, or history does not mark anything read. The existing read-marker table is reused; no migration is needed.
+
+Invoke SignalR `MarkRead(chatId,messageId)` after displaying messages. It returns:
+
+```json
+{ "chatId": 7, "lastReadMessageId": 123, "unreadCount": 2 }
+```
+
+The authenticated user must be active and currently belong to the chat. Both IDs must be positive, and the message must
+exist in that chat. Invalid/missing/cross-chat message IDs yield `validation_failed`; insufficient access yields `forbidden`.
+A read marker advances only to a greater message ID. Repeated/older acknowledgements preserve both its value and update
+time. PostgreSQL locks serialize competing acknowledgements and membership changes, with one marker per participant.
+A user can acknowledge their own membership without joining the live-delivery group first.
+
+Unread count includes **all** messages whose ID is greater than the participant's marker, including their own messages.
+Without a marker, every message counts as unread. Rejoining preserves the original participant row and marker, so
+messages sent while away count by the same rule. One user's read action never changes another participant's marker.
+
+`ChatUpdated` now carries a **personalized summary**, replacing its earlier raw-message payload:
+
+```json
+{
+  "chatId": 7,
+  "lastMessage": { "id": 125, "chatId": 7, "text": "Latest message" },
+  "messageType": "TEXT",
+  "unreadCount": 2,
+  "lastReadMessageId": 123
+}
+```
+
+`lastMessage` is the existing full message DTO (abbreviated above), or null for an empty chat; `messageType` is currently
+TEXT, or null. New messages notify every active participant's connections with their own count. A read acknowledgement
+notifies only that reader's connections, including other tabs; it does not publish read receipts to other participants.
+`ReceiveMessage` retains its existing message DTO. Clients should reload the chat list/history on reconnect: notifications
+are best effort, and their arrival order is not a state version.
+
+The plain UI adds an unread count to chat buttons and acknowledges the greatest message ID rendered in the selected,
+visible, focused conversation. Background tabs/windows do not mark new messages read; visibility/focus changes retry.
+Older pages cannot move the marker backward, and only one acknowledgement is in flight per tab. Chat switching or
+logout invalidates stale UI responses. The UI reloads authoritative counts instead of applying possibly stale events.
+Eight additional JavaScript tests exercise these read/visibility/race behaviors (13 JavaScript tests in total).
+
 ## Repository usage
 
 Register `services.AddPostgresRepositories(connectionString)`, then resolve repositories and `IUnitOfWork` from a DI
@@ -316,7 +361,7 @@ insertion also inserts a profile and normalizes the username with invariant uppe
 
 Authentication use cases live in `Application/Authentication`; password hashing and JWT issuance are implemented in
 `Infrastructure/Authentication`. The HTTP host configures token validation and wires the adapters through dependency
-injection. Chat use cases enforce active membership for reads and writes. Read-marker/unread workflows, password changes, and media cleanup/outbox processing remain to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
+injection. Chat use cases enforce active membership for reads and writes. Password changes and media cleanup/outbox processing remain to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
 
 ## Validation
 
@@ -326,11 +371,12 @@ Against a migrated disposable PostgreSQL database:
 dotnet build Messanger.sln
 dotnet run --project tests/Messanger.IntegrationTests
 node tests/browser/session.test.cjs
+node tests/browser/read.test.cjs
 ```
 
-The integration executable runs 59 named checks: the original seven repository scenarios plus registration, password
+The integration executable runs 66 named checks: the original seven repository scenarios plus registration, password
 hashing, concurrent username uniqueness, login, active-account authorization, JWT rejection cases, CORS, production
-HTTPS enforcement, malformed/oversized bodies, user discovery, atomic group creation, history paging, cross-chat reply rejection, membership loss, SignalR delivery, browser WebSocket authentication, new-chat notification, reconnect recovery, member add/remove/rejoin, moderator restrictions, concurrent ownership/capacity changes, multi-tab revocation, stale tracked authorization, hub validation, Development/Production OpenAPI availability, account suspension/reactivation, soft deletion, refresh-family revocation, stale administrator claims, last-administrator concurrency, and closure of joined/idle connections, secure refresh cookies, reload restoration, rotation/replay/concurrency, family-scoped logout, CSRF, and absolute session expiry. Repository scenarios roll back their own transactions. HTTP scenarios
+HTTPS enforcement, malformed/oversized bodies, user discovery, atomic group creation, history paging, cross-chat reply rejection, membership loss, SignalR delivery, browser WebSocket authentication, new-chat notification, reconnect recovery, member add/remove/rejoin, moderator restrictions, concurrent ownership/capacity changes, multi-tab revocation, stale tracked authorization, hub validation, Development/Production OpenAPI availability, account suspension/reactivation, soft deletion, refresh-family revocation, stale administrator claims, last-administrator concurrency, and closure of joined/idle connections, secure refresh cookies, reload restoration, rotation/replay/concurrency, family-scoped logout, CSRF, absolute session expiry, monotonic read markers, unread counts, read authorization/concurrency, rejoin progress, and private per-user summary delivery. Repository scenarios roll back their own transactions. HTTP scenarios
 use a generated schema in the supplied test database and a temporary RSA key; both are removed after the suite. Use a
 disposable database whose role can create/drop schemas. The test host applies migrations only to its generated schema.
 
