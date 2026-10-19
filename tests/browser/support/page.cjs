@@ -64,6 +64,7 @@ function page(refresh = async () => session(), options = {}) {
     signalR: { HubConnectionBuilder: Builder, HubConnectionState: { Connected: 'Connected' } },
     browserSessions: {
       refresh: () => refresh(), login: async () => session(), logout: async () => { logouts++; },
+      changePassword: (token, passwords) => options.changePassword ? options.changePassword(token, passwords) : Promise.resolve(),
       onChange(callback) { changed = callback; }
     },
     fetch: async url => {

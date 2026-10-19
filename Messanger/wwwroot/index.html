@@ -27,6 +27,18 @@
     <p>Signed in as <strong id="current-user"></strong>. <button id="logout" type="button">Log out</button></p>
     <p>Sign-in survives reloads for up to 30 days. Log out to end this browser session.</p>
     <section>
+      <h2>Change password</h2>
+      <form id="password-form">
+        <fieldset id="password-fields">
+          <p><label>Current password <input id="current-password" type="password" required minlength="10" maxlength="256" autocomplete="current-password"></label></p>
+          <p><label>New password <input id="new-password" type="password" required minlength="10" maxlength="256" autocomplete="new-password"></label></p>
+          <p><label>Confirm new password <input id="confirm-password" type="password" required minlength="10" maxlength="256" autocomplete="new-password"></label></p>
+          <button>Change password</button>
+        </fieldset>
+      </form>
+      <p>Changing your password signs out all sessions. Log in again with the new password.</p>
+    </section>
+    <section>
       <h2>Create a group</h2>
       <form id="search-form">
         <label>Find people <input id="search-query" required maxlength="20" autocomplete="off"></label>

@@ -68,6 +68,7 @@ async function clearSession(message = "Logged out.", preserveDraft = true) {
   element("signed-in").hidden = true;
   element("signed-out").hidden = false;
   element("password").value = "";
+  clearPasswordFields();
   if (!preserveDraft) element("message-text").value = "";
   else if (element("message-text").value) message += " Your unsent text is kept in this tab until you log in again.";
   showSelectedPeople();
@@ -188,6 +189,7 @@ async function startConnection() {
   });
   current.onclose(async () => {
     if (connection !== current || !token) return;
+    const epoch = authEpoch;
     try {
       await renewAccess();
       if (connection !== current || !token) return;
@@ -195,7 +197,7 @@ async function startConnection() {
       await startConnection();
       await refreshChats();
       if (chatId !== null) await openChat(chatId);
-    } catch (error) { report(error); }
+    } catch (error) { if (connection === current && authEpoch === epoch) report(error); }
     updateSendButton();
   });
   await current.start();
@@ -219,6 +221,31 @@ element("account-form").addEventListener("submit", async event => {
   } finally { element("account-fields").disabled = false; }
 });
 element("logout").addEventListener("click", () => logout().catch(report));
+
+function clearPasswordFields() {
+  for (const id of ["current-password", "new-password", "confirm-password"]) element(id).value = "";
+}
+
+element("password-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!token) return;
+  element("password-fields").disabled = true;
+  const epoch = authEpoch;
+  try {
+    const currentPassword = element("current-password").value;
+    const newPassword = element("new-password").value;
+    if (newPassword !== element("confirm-password").value) throw new Error("The new passwords do not match.");
+    if (tokenExpiresAt - Date.now() < 10000) await renewAccess();
+    if (epoch !== authEpoch || !token) return;
+    await browserSessions.changePassword(token, { currentPassword, newPassword });
+    if (epoch === authEpoch || !token) await clearSession("Password changed. Please log in with your new password.");
+  } catch (error) {
+    if (epoch === authEpoch) report(error);
+  } finally {
+    clearPasswordFields();
+    element("password-fields").disabled = false;
+  }
+});
 
 function showSelectedPeople() {
   element("selected-people").textContent = selectedPeople.size
