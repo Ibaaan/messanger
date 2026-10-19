@@ -45,6 +45,13 @@ foreach (var (name, run) in tests)
 
 (string Name, Func<ApiTestHost, Task> Run)[] apiTests =
 [
+    (nameof(PasswordChangeTests.ChangeRevokesEverySessionAndClosesLiveConnections), PasswordChangeTests.ChangeRevokesEverySessionAndClosesLiveConnections),
+    (nameof(PasswordChangeTests.WrongCurrentPasswordPreservesTheExistingSession), PasswordChangeTests.WrongCurrentPasswordPreservesTheExistingSession),
+    (nameof(PasswordChangeTests.PasswordContractsRequireAuthenticationHttpsAndValidInput), PasswordChangeTests.PasswordContractsRequireAuthenticationHttpsAndValidInput),
+    (nameof(PasswordChangeTests.ConcurrentVerifiedChangesHaveExactlyOneWinner), PasswordChangeTests.ConcurrentVerifiedChangesHaveExactlyOneWinner),
+    (nameof(PasswordChangeTests.LoginAndRefreshRacesCannotPreserveAnOldPasswordSession), PasswordChangeTests.LoginAndRefreshRacesCannotPreserveAnOldPasswordSession),
+    (nameof(PasswordChangeTests.InactiveAccountsCannotChangePasswordsFromPreviouslyTrackedScopes), PasswordChangeTests.InactiveAccountsCannotChangePasswordsFromPreviouslyTrackedScopes),
+
     (nameof(ChatReadTests.UnreadCountsIncludeOwnMessagesAndFetchingDoesNotMarkRead), ChatReadTests.UnreadCountsIncludeOwnMessagesAndFetchingDoesNotMarkRead),
     (nameof(ChatReadTests.ReadMarkersAreMonotonicAndNoOpsKeepTheirTimestamp), ChatReadTests.ReadMarkersAreMonotonicAndNoOpsKeepTheirTimestamp),
     (nameof(ChatReadTests.ReadContractsRejectInvalidMessagesAndOutsiders), ChatReadTests.ReadContractsRejectInvalidMessagesAndOutsiders),

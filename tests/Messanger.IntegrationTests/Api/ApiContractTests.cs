@@ -22,6 +22,7 @@ internal static class ApiContractTests
             ("/api/chats/{chatId}/members", "post"),
             ("/api/admin/users/{userId}/status", "patch"),
             ("/api/users/me", "delete"),
+            ("/api/users/me/password", "post"),
             ("/api/chats/{chatId}/members/{userId}", "delete"),
             ("/api/chats/{chatId}/ownership", "post"),
             ("/api/chats/{chatId}/members/{userId}/role", "patch"),
