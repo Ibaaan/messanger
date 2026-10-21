@@ -261,7 +261,7 @@ Deletion marks memberships departed, frees group capacity, and preserves message
 returns `deleted_account` / `Deleted account` instead of the former username/display name. Identity/profile records
 remain stored for referential integrity, and the username remains reserved. This is soft deletion, not a data-erasure workflow.
 A suspended owner retains ownership and can resume managing the group after an administrator reactivates their account.
-The plain frontend has no account-administration or deletion controls yet; these routes are available through the API.
+The plain frontend has a password-change form; administrator status and account deletion still have no UI; these routes are available through the API.
 
 ## Persistent browser sessions
 
@@ -299,7 +299,7 @@ A lost rotation response requires a fresh login if the old cookie is subsequentl
 
 Five JavaScript tests cover restoration/renewal, draft retention, cross-tab logout, account-change races, and tab locking.
 The real-browser reload/new-tab/logout flow was manually confirmed by the user over HTTPS. Server tests model reopening
-with a fresh client sharing only cookies. Password changes and expired refresh-record cleanup remain separate work.
+with a fresh client sharing only cookies. Password changes revoke every session as described below; expired refresh-record cleanup remains separate work.
 Production must persist/protect ASP.NET Core Data Protection keys for CSRF cookies across restarts/instances and
 coordinate live revocation across application instances; live connection bookkeeping still supports one instance.
 
@@ -348,6 +348,42 @@ Older pages cannot move the marker backward, and only one acknowledgement is in 
 logout invalidates stale UI responses. The UI reloads authoritative counts instead of applying possibly stale events.
 Eight additional JavaScript tests exercise these read/visibility/race behaviors (13 JavaScript tests in total).
 
+## Change password
+
+Use **Change password** in the signed-in UI, entering the current password, a new password, and its confirmation.
+Every attempt clears those form fields. A successful change signs out all existing sessions, preserves unsent message
+text in the current tab, and asks for a fresh login with the new password. A wrong current password leaves the existing
+session active. Tabs sharing this browser receive a logout notification.
+
+The API is `POST /api/users/me/password` over HTTPS with the caller's explicit access Bearer token:
+
+```json
+{ "currentPassword": "existing passphrase", "newPassword": "replacement passphrase" }
+```
+
+The server derives the user from the token; request bodies cannot select another account. Password policy is shared
+with registration: 10–256 characters, spaces allowed, and not all whitespace. Values are never trimmed. A valid current
+password is required even when an access token is valid. Passwords and hashes are never returned.
+
+Success returns **204**, atomically replacing the salted Identity hash, incrementing `session_version`, and revoking all
+existing refresh families. Existing access tokens stop authorizing requests and the user's live connections close;
+a fresh login starts a new family. The response expires the browser's refresh cookie with its original scope.
+Other browsers/devices may retain an unusable cookie until their next refresh, which clears it.
+
+This route authenticates with explicit Bearer credentials; refresh cookies alone never authorize it. The frontend uses
+`credentials: same-origin` to accept the expired-cookie response and shares the refresh/logout Web Lock to serialize
+cookie mutations. Auth-cookie lifecycle endpoints keep their existing CSRF protection.
+
+A wrong current password returns 401 `invalid_credentials`; missing authentication returns 401 `unauthorized`.
+Inactive/revoked sessions return 403; invalid password input returns 422; a verified account snapshot that changes before
+commit returns 409 `account_conflict`. Failed validation/confirmation does not revoke families or clear a valid cookie.
+The conditional database update prevents two requests verified against the same old hash/version from both winning.
+Login/refresh use the same user-row locking order, so an old password/session version cannot survive a concurrent change.
+
+No migration is needed. Six integration scenarios cover hashing, all-session revocation, cookie/live closure, targeting,
+validation/access, concurrency, and inactive accounts. Six JavaScript tests cover the form, lock/Bearer flow, failed
+confirmation, stale-account responses, and late renewal errors (19 JavaScript tests in total).
+
 ## Repository usage
 
 Register `services.AddPostgresRepositories(connectionString)`, then resolve repositories and `IUnitOfWork` from a DI
@@ -361,7 +397,7 @@ insertion also inserts a profile and normalizes the username with invariant uppe
 
 Authentication use cases live in `Application/Authentication`; password hashing and JWT issuance are implemented in
 `Infrastructure/Authentication`. The HTTP host configures token validation and wires the adapters through dependency
-injection. Chat use cases enforce active membership for reads and writes. Password changes and media cleanup/outbox processing remain to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
+injection. Chat use cases enforce active membership for reads and writes. Media cleanup/outbox processing and expired refresh-record cleanup remain to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
 
 ## Validation
 
@@ -372,11 +408,12 @@ dotnet build Messanger.sln
 dotnet run --project tests/Messanger.IntegrationTests
 node tests/browser/session.test.cjs
 node tests/browser/read.test.cjs
+node tests/browser/password.test.cjs
 ```
 
-The integration executable runs 66 named checks: the original seven repository scenarios plus registration, password
+The integration executable runs 72 named checks: the original seven repository scenarios plus registration, password
 hashing, concurrent username uniqueness, login, active-account authorization, JWT rejection cases, CORS, production
-HTTPS enforcement, malformed/oversized bodies, user discovery, atomic group creation, history paging, cross-chat reply rejection, membership loss, SignalR delivery, browser WebSocket authentication, new-chat notification, reconnect recovery, member add/remove/rejoin, moderator restrictions, concurrent ownership/capacity changes, multi-tab revocation, stale tracked authorization, hub validation, Development/Production OpenAPI availability, account suspension/reactivation, soft deletion, refresh-family revocation, stale administrator claims, last-administrator concurrency, and closure of joined/idle connections, secure refresh cookies, reload restoration, rotation/replay/concurrency, family-scoped logout, CSRF, absolute session expiry, monotonic read markers, unread counts, read authorization/concurrency, rejoin progress, and private per-user summary delivery. Repository scenarios roll back their own transactions. HTTP scenarios
+HTTPS enforcement, malformed/oversized bodies, user discovery, atomic group creation, history paging, cross-chat reply rejection, membership loss, SignalR delivery, browser WebSocket authentication, new-chat notification, reconnect recovery, member add/remove/rejoin, moderator restrictions, concurrent ownership/capacity changes, multi-tab revocation, stale tracked authorization, hub validation, Development/Production OpenAPI availability, account suspension/reactivation, soft deletion, refresh-family revocation, stale administrator claims, last-administrator concurrency, and closure of joined/idle connections, secure refresh cookies, reload restoration, rotation/replay/concurrency, family-scoped logout, CSRF, absolute session expiry, monotonic read markers, unread counts, read authorization/concurrency, rejoin progress, private per-user summary delivery, password-change validation, session invalidation, and concurrent password/login/refresh requests. Repository scenarios roll back their own transactions. HTTP scenarios
 use a generated schema in the supplied test database and a temporary RSA key; both are removed after the suite. Use a
 disposable database whose role can create/drop schemas. The test host applies migrations only to its generated schema.
 
