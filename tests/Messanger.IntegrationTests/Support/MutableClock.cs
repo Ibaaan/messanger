@@ -1,8 +1,8 @@
 namespace Messanger.IntegrationTests.Support;
 
-internal sealed class MutableClock : TimeProvider
+internal sealed class MutableClock(DateTimeOffset? initial = null) : TimeProvider
 {
-    private DateTimeOffset now = DateTimeOffset.UtcNow;
+    private DateTimeOffset now = initial ?? DateTimeOffset.UtcNow;
     public override DateTimeOffset GetUtcNow() => now;
     public void Advance(TimeSpan duration) => now += duration;
 }

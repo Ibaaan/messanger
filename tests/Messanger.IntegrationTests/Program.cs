@@ -1,6 +1,7 @@
 using Messanger.Infrastructure;
 using Messanger.IntegrationTests.Api;
 using Messanger.IntegrationTests.Repositories;
+using Messanger.IntegrationTests.Maintenance;
 using Messanger.IntegrationTests.Support;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -43,8 +44,26 @@ foreach (var (name, run) in tests)
         Console.Error.WriteLine($"FAIL {name}: {exception}");
     }
 
+(string Name, Func<Task> Run)[] workerTests =
+[
+    (nameof(RefreshTokenCleanupWorkerTests.FailureRetriesOnScheduleWithANewDisposedScope), RefreshTokenCleanupWorkerTests.FailureRetriesOnScheduleWithANewDisposedScope),
+    (nameof(RefreshTokenCleanupWorkerTests.ShutdownCancelsDatabaseWorkAndDisposesItsScope), RefreshTokenCleanupWorkerTests.ShutdownCancelsDatabaseWorkAndDisposesItsScope),
+    (nameof(RefreshTokenCleanupWorkerTests.EachPassHonorsItsBatchBudgetBeforeWaiting), RefreshTokenCleanupWorkerTests.EachPassHonorsItsBatchBudgetBeforeWaiting)
+];
+foreach (var (name, run) in workerTests)
+    try { await run(); Console.WriteLine($"PASS {name}"); }
+    catch (Exception exception) { failures++; Console.Error.WriteLine($"FAIL {name}: {exception}"); }
+
 (string Name, Func<ApiTestHost, Task> Run)[] apiTests =
 [
+    (nameof(RefreshTokenRetentionTests.OnlyRecordsExpiredForAtLeastNinetyDaysAreEligible), RefreshTokenRetentionTests.OnlyRecordsExpiredForAtLeastNinetyDaysAreEligible),
+    (nameof(RefreshTokenRetentionTests.NewerFamilyRecordsPreserveOlderReplayEvidence), RefreshTokenRetentionTests.NewerFamilyRecordsPreserveOlderReplayEvidence),
+    (nameof(RefreshTokenRetentionTests.BatchesAreBoundedResumableAndIdempotent), RefreshTokenRetentionTests.BatchesAreBoundedResumableAndIdempotent),
+    (nameof(RefreshTokenRetentionTests.ConcurrentCleanersNeverDeleteTheSameRowTwice), RefreshTokenRetentionTests.ConcurrentCleanersNeverDeleteTheSameRowTwice),
+    (nameof(RefreshTokenRetentionTests.LockedRecordsAreSkippedRatherThanBlockingCleanup), RefreshTokenRetentionTests.LockedRecordsAreSkippedRatherThanBlockingCleanup),
+    (nameof(RefreshTokenRetentionTests.ActiveSessionsAndConsumedTokenReplayDetectionSurviveCleanup), RefreshTokenRetentionTests.ActiveSessionsAndConsumedTokenReplayDetectionSurviveCleanup),
+    (nameof(RefreshTokenRetentionTests.CancellationKeepsCommittedBatchesAndAllowsALaterResume), RefreshTokenRetentionTests.CancellationKeepsCommittedBatchesAndAllowsALaterResume),
+
     (nameof(PasswordChangeTests.ChangeRevokesEverySessionAndClosesLiveConnections), PasswordChangeTests.ChangeRevokesEverySessionAndClosesLiveConnections),
     (nameof(PasswordChangeTests.WrongCurrentPasswordPreservesTheExistingSession), PasswordChangeTests.WrongCurrentPasswordPreservesTheExistingSession),
     (nameof(PasswordChangeTests.PasswordContractsRequireAuthenticationHttpsAndValidInput), PasswordChangeTests.PasswordContractsRequireAuthenticationHttpsAndValidInput),
@@ -142,7 +161,7 @@ await using (var host = await ApiTestHost.CreateAsync(connectionString))
         }
 }
 
-var total = tests.Length + apiTests.Length;
+var total = tests.Length + workerTests.Length + apiTests.Length;
 Console.WriteLine(
     $"{total - failures}/{total} integration checks passed. Repository transactions rolled back; API test schema removed.");
 return failures == 0 ? 0 : 1;

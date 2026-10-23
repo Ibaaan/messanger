@@ -7,9 +7,17 @@ namespace Messanger.Authentication;
 
 internal static class SessionEndpoints
 {
-    public static IServiceCollection AddBrowserSessions(this IServiceCollection services)
+    public static IServiceCollection AddBrowserSessions(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<SessionService>();
+        services.AddScoped<RefreshTokenCleanupService>();
+        services.AddOptions<RefreshTokenCleanupOptions>().Bind(configuration.GetSection("RefreshTokenCleanup"))
+            .Validate(options => options.Interval >= TimeSpan.FromMinutes(1) && options.Interval <= TimeSpan.FromDays(7),
+                "RefreshTokenCleanup:Interval must be between one minute and seven days.")
+            .Validate(options => options.BatchSize is >= 1 and <= 10000, "RefreshTokenCleanup:BatchSize must be 1–10000.")
+            .Validate(options => options.MaximumBatchesPerRun is >= 1 and <= 100, "RefreshTokenCleanup:MaximumBatchesPerRun must be 1–100.")
+            .ValidateOnStart();
+        services.AddHostedService<RefreshTokenCleanupWorker>();
         services.AddScoped<AccountSession>();
         services.AddAntiforgery(options =>
         {
