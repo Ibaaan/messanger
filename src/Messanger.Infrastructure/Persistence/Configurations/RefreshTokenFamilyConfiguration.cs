@@ -15,5 +15,7 @@ internal sealed class RefreshTokenFamilyConfiguration : IEntityTypeConfiguration
         builder.HasIndex(x => x.JtiHash).IsUnique();
         builder.HasIndex(x => new { x.FamilyId, x.RevokedAt });
         builder.HasIndex(x => new { x.UserId, x.ExpiresAt });
+        builder.HasIndex(x => new { x.ExpiresAt, x.Id });
+        builder.HasIndex(x => new { x.FamilyId, x.ExpiresAt });
     }
 }

@@ -287,6 +287,10 @@ namespace Messanger.Infrastructure.Migrations
                     b.HasIndex("JtiHash")
                         .IsUnique();
 
+                    b.HasIndex("ExpiresAt", "Id");
+
+                    b.HasIndex("FamilyId", "ExpiresAt");
+
                     b.HasIndex("FamilyId", "RevokedAt");
 
                     b.HasIndex("UserId", "ExpiresAt");
