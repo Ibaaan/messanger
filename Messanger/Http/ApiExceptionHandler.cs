@@ -1,4 +1,5 @@
 using Messanger.Application;
+using Messanger.Security;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -31,6 +32,9 @@ internal sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) :
                 ApiError.ForStatus(badRequest.StatusCode).Code, ApiError.ForStatus(badRequest.StatusCode).Message),
             _ => (500, "internal_error", "An unexpected error occurred.")
         };
+        if (error.Item2 is "invalid_credentials" or "session_expired")
+            context.RequestServices.GetRequiredService<SecurityAudit>().AuthenticationFailure(context, "credentials_rejected");
+        if (error.Item1 == 403) context.RequestServices.GetRequiredService<SecurityAudit>().AccessDenied(context);
         if (error.Item1 == 500)
             logger.LogError(exception, "Unhandled request failure {RequestId}", context.TraceIdentifier);
         context.Response.Headers.CacheControl = "no-store";

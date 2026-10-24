@@ -5,6 +5,7 @@ using Messanger.Application.Accounts;
 using Messanger.Chats;
 using Messanger.Http;
 using Messanger.Realtime;
+using Messanger.Security;
 
 namespace Messanger.Accounts;
 
@@ -22,7 +23,7 @@ internal static class AccountEndpoints
             .WithDescription("Current database ADMIN role required. ACTIVE or SUSPENDED; cannot target yourself or restore DELETED accounts.")
             .Produces<AccountResponse>().WithApiErrors();
         endpoints.MapPost("/api/users/me/password", async (ChangePasswordRequest request, ClaimsPrincipal principal,
-            PasswordChangeService passwords, AccountConnections connections, HttpContext context, CancellationToken ct) =>
+            PasswordChangeService passwords, AccountConnections connections, HttpContext context, SecurityAudit audit, CancellationToken ct) =>
         {
             if (!context.Request.IsHttps)
             {
@@ -33,9 +34,10 @@ internal static class AccountEndpoints
             var version = int.Parse(principal.FindFirst("session_version")!.Value, CultureInfo.InvariantCulture);
             var newVersion = await passwords.ChangeAsync(userId, version, request.CurrentPassword, request.NewPassword, ct);
             connections.RevokeBefore(userId, newVersion);
+            audit.Changed(context, "password_changed", userId);
             SessionCookie.Clear(context);
             return Results.NoContent();
-        }).RequireAuthorization().WithTags("Accounts").WithName("ChangeMyPassword")
+        }).RequireAuthorization().AddEndpointFilter<PasswordAttemptFilter>().WithTags("Accounts").WithName("ChangeMyPassword")
             .WithDescription("HTTPS, active access Bearer, and current password required. New password follows registration policy. Atomically replaces the hash and revokes every existing session; log in again after 204.")
             .Produces(StatusCodes.Status204NoContent).WithApiErrors();
         endpoints.MapDelete("/api/users/me", async (ClaimsPrincipal principal, AccountService accounts,

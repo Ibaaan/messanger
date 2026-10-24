@@ -1,5 +1,6 @@
 using Messanger.Application.Authentication;
 using Messanger.Http;
+using Messanger.Security;
 using Messanger.Realtime;
 using Microsoft.AspNetCore.Antiforgery;
 
@@ -38,7 +39,7 @@ internal static class SessionEndpoints
             .AddEndpointFilter<SessionCsrfFilter>();
         group.MapGet("/csrf", (HttpContext context, IAntiforgery antiforgery) =>
             Results.Ok(new CsrfResponse(antiforgery.GetAndStoreTokens(context).RequestToken!)))
-            .WithName("GetSessionCsrf").Produces<CsrfResponse>().WithApiErrors();
+            .RequireRateLimiting("sessions").WithName("GetSessionCsrf").Produces<CsrfResponse>().WithApiErrors();
         group.MapPost("/login", async (CredentialsRequest request, SessionService sessions, HttpContext context,
             AccountConnections connections, TimeProvider clock, CancellationToken ct) =>
         {
@@ -47,7 +48,7 @@ internal static class SessionEndpoints
             if (previous is not null) connections.RevokeFamily(previous.FamilyId);
             SessionCookie.Write(context, session, clock);
             return Results.Ok(session.Login);
-        }).WithName("Login").Produces<LoginResponse>().WithApiErrors();
+        }).RequireRateLimiting("login").AddEndpointFilter<LoginAttemptFilter>().WithName("Login").Produces<LoginResponse>().WithApiErrors();
         group.MapPost("/refresh", async (SessionService sessions, HttpContext context, AccountConnections connections,
             TimeProvider clock, CancellationToken ct) =>
         {
@@ -56,19 +57,20 @@ internal static class SessionEndpoints
             if (attempt.Session is not { } session)
             {
                 SessionCookie.Clear(context);
+                context.RequestServices.GetRequiredService<SecurityAudit>().AuthenticationFailure(context, attempt.RevokedFamily is null ? "session_rejected" : "refresh_replay");
                 await ApiError.WriteAsync(context, 401, "session_expired", "Your session expired or was revoked. Please log in again.");
                 return Results.Empty;
             }
             SessionCookie.Write(context, session, clock);
             return Results.Ok(session.Login);
-        }).WithName("RefreshSession").Produces<LoginResponse>().WithApiErrors();
+        }).RequireRateLimiting("sessions").WithName("RefreshSession").Produces<LoginResponse>().WithApiErrors();
         group.MapPost("/logout", async (SessionService sessions, HttpContext context, AccountConnections connections, CancellationToken ct) =>
         {
             var revoked = await sessions.LogoutAsync(context.Request.Cookies[SessionCookie.Name], ct);
             if (revoked is not null) connections.RevokeFamily(revoked.FamilyId);
             SessionCookie.Clear(context);
             return Results.NoContent();
-        }).WithName("LogoutSession").Produces(204).WithApiErrors();
+        }).RequireRateLimiting("sessions").WithName("LogoutSession").Produces(204).WithApiErrors();
         return endpoints;
     }
 }

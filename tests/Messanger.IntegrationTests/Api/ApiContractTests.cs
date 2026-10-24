@@ -31,6 +31,7 @@ internal static class ApiContractTests
             var operation = paths.GetProperty(path).GetProperty(method);
             TestAssert.True(operation.GetProperty("security").GetArrayLength() > 0, "Group routes require bearer auth.");
             TestAssert.True(operation.GetProperty("responses").TryGetProperty("422", out _), "Document validation errors.");
+            TestAssert.True(operation.GetProperty("responses").TryGetProperty("429", out _), "Document rate-limit errors.");
         }
         foreach (var route in new[] { "/auth/login", "/auth/refresh", "/auth/logout" })
             TestAssert.True(!paths.GetProperty(route).GetProperty("post").TryGetProperty("security", out _),

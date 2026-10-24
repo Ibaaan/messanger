@@ -19,6 +19,7 @@ public static class ApiError
             404 => ("not_found", "The resource was not found."),
             405 => ("method_not_allowed", "This HTTP method is not allowed."),
             413 => ("payload_too_large", "The request body is too large."),
+            429 => ("rate_limited", "Too many requests. Try again later."),
             415 => ("unsupported_media_type", "The content type is not supported."),
             _ => ("request_failed", "The request could not be completed.")
         };

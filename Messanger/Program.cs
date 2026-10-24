@@ -1,3 +1,4 @@
+using Messanger.Security;
 using Messanger.Accounts;
 using Messanger.Application.Accounts;
 using Messanger.Authentication;
@@ -32,6 +33,7 @@ public sealed class Program
         builder.Services.AddScoped<ChatMembershipService>();
         builder.Services.AddScoped<ChatReadService>();
         builder.Services.AddScoped<MessageService>();
+        builder.Services.AddSecurityControls(builder.Configuration);
         builder.Services.AddChatRealtime();
         builder.Services.AddAccessAuthentication(builder.Configuration);
         builder.Services.AddBrowserSessions(builder.Configuration);
@@ -52,6 +54,8 @@ public sealed class Program
         app.UseCoreHttpSecurity(app.Environment.IsDevelopment());
         app.UseDefaultFiles();
         app.UseStaticFiles();
+        app.UseRouting();
+        app.UseRateLimiter();
         app.UseWebSockets();
         app.UseAuthentication();
         app.UseAuthorization();

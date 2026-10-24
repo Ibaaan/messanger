@@ -3,6 +3,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Messanger.Application;
 using Messanger.Http;
+using Messanger.Security;
 using Messanger.Application.Authentication;
 using Messanger.Application.Persistence;
 
@@ -18,7 +19,7 @@ internal static class AuthenticationEndpoints
             {
                 var user = await authentication.RegisterAsync(request.Username, request.Password, cancellationToken);
                 return Results.Json(user, statusCode: StatusCodes.Status201Created);
-            }).AllowAnonymous().WithTags("Authentication").WithName("Register").Produces<UserResponse>(StatusCodes.Status201Created).WithApiErrors();
+            }).AllowAnonymous().RequireRateLimiting("registration").WithTags("Authentication").WithName("Register").Produces<UserResponse>(StatusCodes.Status201Created).WithApiErrors();
 
         // A minimal protected endpoint for the signed-in account; never returns persistence entities or hashes.
         endpoints.MapGet("/api/users/me",

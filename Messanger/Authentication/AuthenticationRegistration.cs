@@ -1,4 +1,5 @@
 using System.Globalization;
+using Messanger.Security;
 using System.IdentityModel.Tokens.Jwt;
 using Messanger.Application.Authentication;
 using Messanger.Infrastructure.Authentication;
@@ -31,7 +32,7 @@ internal static class AuthenticationRegistration
                     ValidateAudience = true,
                     ValidAudience = settings.Value.Audience,
                     ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = key.Key,
+                    IssuerSigningKey = key.ValidationKey,
                     RequireSignedTokens = true,
                     RequireExpirationTime = true,
                     ValidateLifetime = true,
@@ -43,6 +44,16 @@ internal static class AuthenticationRegistration
                 };
                 options.Events = new JwtBearerEvents
                 {
+                    OnChallenge = context =>
+                    {
+                        context.HttpContext.RequestServices.GetRequiredService<SecurityAudit>().AuthenticationFailure(context.HttpContext, "access_token_rejected");
+                        return Task.CompletedTask;
+                    },
+                    OnForbidden = context =>
+                    {
+                        context.HttpContext.RequestServices.GetRequiredService<SecurityAudit>().AccessDenied(context.HttpContext);
+                        return Task.CompletedTask;
+                    },
                     OnMessageReceived = context =>
                     {
                         var request = context.Request;

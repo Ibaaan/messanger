@@ -1,3 +1,4 @@
+using Messanger.Security;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -84,6 +85,7 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
         {
             // All request scopes use the isolated schema, never the caller's application tables.
             if (clock is not null) { services.RemoveAll<TimeProvider>(); services.AddSingleton(clock); }
+            services.PostConfigure<SecurityLimitsOptions>(options => options.Enabled = false);
             // Retention scenarios run explicit passes; normal API tests must not race a background purge.
             services.PostConfigure<RefreshTokenCleanupOptions>(options => options.Enabled = false);
             services.RemoveAll<NpgsqlDataSource>();
