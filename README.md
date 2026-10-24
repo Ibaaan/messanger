@@ -299,7 +299,7 @@ A lost rotation response requires a fresh login if the old cookie is subsequentl
 
 Five JavaScript tests cover restoration/renewal, draft retention, cross-tab logout, account-change races, and tab locking.
 The real-browser reload/new-tab/logout flow was manually confirmed by the user over HTTPS. Server tests model reopening
-with a fresh client sharing only cookies. Password changes revoke every session as described below; expired refresh-record cleanup remains separate work.
+with a fresh client sharing only cookies. Password changes revoke every session as described below; expired refresh-record retention is handled by the worker described below.
 Production must persist/protect ASP.NET Core Data Protection keys for CSRF cookies across restarts/instances and
 coordinate live revocation across application instances; live connection bookkeeping still supports one instance.
 
@@ -384,6 +384,53 @@ No migration is needed. Six integration scenarios cover hashing, all-session rev
 validation/access, concurrency, and inactive accounts. Six JavaScript tests cover the form, lock/Bearer flow, failed
 confirmation, stale-account responses, and late renewal errors (19 JavaScript tests in total).
 
+## Expired refresh-token cleanup
+
+A background worker runs once at startup and then waits 24 hours after each pass. It purges refresh-token records
+whose expiry is **at least 90 days old**, using an inclusive UTC cutoff (`expires_at <= now - 90 days`). Retention is
+fixed in application code. A family with any record newer than that cutoff is preserved in full, including older
+ancestors, so active/recent families retain their replay evidence. Revocation alone never makes a record eligible.
+
+Apply the additive index migration before starting the updated app:
+
+```bash
+dotnet ef database update --project src/Messanger.Infrastructure
+```
+
+`RefreshTokenRetentionIndexes` adds indexes on `(expires_at,id)` and `(family_id,expires_at)` for the bounded candidate
+scan and family check. It does not delete data or change token/session lifetimes. Migrations remain an explicit step.
+
+The defaults in `appsettings.json` are:
+
+```json
+"RefreshTokenCleanup": {
+  "Enabled": true,
+  "Interval": "1.00:00:00",
+  "BatchSize": 1000,
+  "MaximumBatchesPerRun": 10
+}
+```
+
+The interval supports one minute through seven days; batch size supports 1–10000 rows and a pass supports 1–100 batches.
+Invalid settings fail startup. Environment overrides use names such as `RefreshTokenCleanup__BatchSize`.
+`Enabled=false` disables automatic passes. The interval is measured after the preceding pass, rather than at a fixed
+wall-clock time.
+
+Each batch is one atomic PostgreSQL delete, committed directly without loading entities. `FOR UPDATE SKIP LOCKED`
+allows independent cleaners to process disjoint batches and skip rows another operation has locked. Runs stop at the
+batch budget; remaining/skipped records wait for a later pass. A full final batch reports `BatchLimitReached`, which
+is a scheduling hint, not an exact backlog count. Every pass uses and disposes a fresh DI/database scope.
+
+Database failures are logged and retried at the next configured interval. Shutdown cancels an in-flight command or
+delay; completed batches remain committed and a later pass resumes the backlog. Logs contain deletion counts/cutoff
+and failures, never raw token values. The worker deletes only refresh records; users, chats, messages, and active
+sessions are retained. There is no public cleanup endpoint.
+
+Seven database scenarios cover retention boundaries, family evidence, bounded resumption, concurrent cleaners,
+locked-row skipping, active-session/replay behavior, and cancellation. Three controlled worker tests cover scheduled
+recovery, fresh scope disposal, batch budgets, and shutdown without waiting for real daily timers. Normal API tests
+disable automatic passes and invoke retention explicitly in isolated schemas.
+
 ## Repository usage
 
 Register `services.AddPostgresRepositories(connectionString)`, then resolve repositories and `IUnitOfWork` from a DI
@@ -397,7 +444,7 @@ insertion also inserts a profile and normalizes the username with invariant uppe
 
 Authentication use cases live in `Application/Authentication`; password hashing and JWT issuance are implemented in
 `Infrastructure/Authentication`. The HTTP host configures token validation and wires the adapters through dependency
-injection. Chat use cases enforce active membership for reads and writes. Media cleanup/outbox processing and expired refresh-record cleanup remain to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
+injection. Chat use cases enforce active membership for reads and writes. Media cleanup/outbox processing remains to be implemented. Refresh repository revocation methods stage changes until `SaveChangesAsync`.
 
 ## Validation
 
@@ -411,7 +458,7 @@ node tests/browser/read.test.cjs
 node tests/browser/password.test.cjs
 ```
 
-The integration executable runs 72 named checks: the original seven repository scenarios plus registration, password
+The executable runs 82 named checks (7 repository, 3 worker, and 72 HTTP/database/live scenarios): the original seven repository scenarios plus registration, password
 hashing, concurrent username uniqueness, login, active-account authorization, JWT rejection cases, CORS, production
 HTTPS enforcement, malformed/oversized bodies, user discovery, atomic group creation, history paging, cross-chat reply rejection, membership loss, SignalR delivery, browser WebSocket authentication, new-chat notification, reconnect recovery, member add/remove/rejoin, moderator restrictions, concurrent ownership/capacity changes, multi-tab revocation, stale tracked authorization, hub validation, Development/Production OpenAPI availability, account suspension/reactivation, soft deletion, refresh-family revocation, stale administrator claims, last-administrator concurrency, and closure of joined/idle connections, secure refresh cookies, reload restoration, rotation/replay/concurrency, family-scoped logout, CSRF, absolute session expiry, monotonic read markers, unread counts, read authorization/concurrency, rejoin progress, private per-user summary delivery, password-change validation, session invalidation, and concurrent password/login/refresh requests. Repository scenarios roll back their own transactions. HTTP scenarios
 use a generated schema in the supplied test database and a temporary RSA key; both are removed after the suite. Use a
