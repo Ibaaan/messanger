@@ -13,7 +13,7 @@ public static class DependencyInjection
     public static IServiceCollection AddPostgresRepositories(this IServiceCollection services, string connectionString)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
-        services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(connectionString));
+        services.AddSingleton<NpgsqlDataSource>(_ => new NpgsqlDataSourceBuilder(connectionString) { Name = "messanger" }.Build());
         services.AddDbContext<MessangerDbContext>((provider, options) =>
             options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>(), pg => pg.SetPostgresVersion(18, 0)));
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<MessangerDbContext>());

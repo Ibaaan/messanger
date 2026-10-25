@@ -100,7 +100,7 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
             // Retention scenarios run explicit passes; normal API tests must not race a background purge.
             services.PostConfigure<RefreshTokenCleanupOptions>(options => options.Enabled = false);
             services.RemoveAll<NpgsqlDataSource>();
-            services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(connectionString));
+            services.AddSingleton<NpgsqlDataSource>(_ => new NpgsqlDataSourceBuilder(connectionString) { Name = "messanger" }.Build());
             services.PostConfigure<JwtOptions>(options =>
             {
                 options.Issuer = Issuer;

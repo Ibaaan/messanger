@@ -1,8 +1,9 @@
 using Microsoft.Extensions.Options;
+using Messanger.Operations;
 
 namespace Messanger.Security;
 
-public sealed class SecurityAudit(ILogger<SecurityAudit> logger, IOptions<SecurityLimitsOptions> settings, TimeProvider clock)
+public sealed class SecurityAudit(ILogger<SecurityAudit> logger, IOptions<SecurityLimitsOptions> settings, TimeProvider clock, OperationalMetrics metrics)
 {
     // Sample denial events once per category/bucket/window to avoid turning rejected floods into log floods.
     private readonly long[] windows = new long[5 * SecurityBudgets.BucketCount];
@@ -17,6 +18,7 @@ public sealed class SecurityAudit(ILogger<SecurityAudit> logger, IOptions<Securi
 
     private void Denied(int category, HttpContext? context, string reason, string action, long? userId = null)
     {
+        metrics.Security(action);
         var key = userId is { } id ? SecurityBudgets.UserKey(id) : context is null ? "unknown" : SecurityBudgets.IpKey(context);
         var slot = category * SecurityBudgets.BucketCount + SecurityBudgets.Bucket(key);
         var window = clock.GetUtcNow().UtcTicks / settings.Value.Window.Ticks + 1;

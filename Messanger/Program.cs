@@ -1,3 +1,4 @@
+using Messanger.Operations;
 using Messanger.Security;
 using Messanger.Accounts;
 using Messanger.Application.Accounts;
@@ -33,6 +34,9 @@ public sealed class Program
         builder.Services.AddScoped<ChatMembershipService>();
         builder.Services.AddScoped<ChatReadService>();
         builder.Services.AddScoped<MessageService>();
+        builder.Logging.ClearProviders();
+        builder.Logging.AddJsonConsole(options => options.IncludeScopes = true);
+        builder.Services.AddOperations(builder.Configuration);
         builder.Services.AddSecurityControls(builder.Configuration);
         builder.Services.AddChatRealtime();
         builder.Services.AddAccessAuthentication(builder.Configuration);
@@ -45,6 +49,8 @@ public sealed class Program
         var app = builder.Build();
         // Fail startup on an invalid/missing signing key rather than the first login request.
         app.Services.GetRequiredService<JwtSigningKey>();
+        app.UseRouting();
+        app.UseMiddleware<RequestObservabilityMiddleware>();
         app.UseExceptionHandler();
         app.UseStatusCodePages(async status =>
         {
@@ -54,11 +60,11 @@ public sealed class Program
         app.UseCoreHttpSecurity(app.Environment.IsDevelopment());
         app.UseDefaultFiles();
         app.UseStaticFiles();
-        app.UseRouting();
         app.UseRateLimiter();
         app.UseWebSockets();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.MapOperations();
         app.MapAuthenticationEndpoints();
         app.MapSessionEndpoints();
         app.MapAccountEndpoints();
