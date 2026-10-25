@@ -56,6 +56,21 @@ foreach (var (name, run) in workerTests)
 
 (string Name, Func<ApiTestHost, Task> Run)[] apiTests =
 [
+
+    (nameof(SecurityControlsTests.RegistrationLimitsUseTheRealPeerAndIgnoreUntrustedForwarders), SecurityControlsTests.RegistrationLimitsUseTheRealPeerAndIgnoreUntrustedForwarders),
+    (nameof(SecurityControlsTests.LoginLimitsBothIpAndNormalizedAccountWithoutEnumeratingUsers), SecurityControlsTests.LoginLimitsBothIpAndNormalizedAccountWithoutEnumeratingUsers),
+    (nameof(SecurityControlsTests.SessionThrottlingDoesNotRotateOrClearTheRefreshCookie), SecurityControlsTests.SessionThrottlingDoesNotRotateOrClearTheRefreshCookie),
+    (nameof(SecurityControlsTests.PasswordConfirmationBudgetIsSharedAcrossPeerAddresses), SecurityControlsTests.PasswordConfirmationBudgetIsSharedAcrossPeerAddresses),
+    (nameof(SecurityControlsTests.MessageBudgetsCoverRepliesAndAllUserConnections), SecurityControlsTests.MessageBudgetsCoverRepliesAndAllUserConnections),
+    (nameof(SecurityControlsTests.ExcessiveHubCallsCloseTheAbusiveConnection), SecurityControlsTests.ExcessiveHubCallsCloseTheAbusiveConnection),
+    (nameof(SecurityControlsTests.ConnectionQuotasProtectExistingClientsAndReleaseSlots), SecurityControlsTests.ConnectionQuotasProtectExistingClientsAndReleaseSlots),
+    (nameof(SecurityControlsTests.ReconnectingDoesNotResetConnectionAttemptBudgets), SecurityControlsTests.ReconnectingDoesNotResetConnectionAttemptBudgets),
+    (nameof(SecurityControlsTests.GlobalBudgetBoundsRequestsAcrossDifferentPeers), SecurityControlsTests.GlobalBudgetBoundsRequestsAcrossDifferentPeers),
+    (nameof(SecurityControlsTests.LimitsRecoverAfterTheirWindowWithoutRestarting), SecurityControlsTests.LimitsRecoverAfterTheirWindowWithoutRestarting),
+    (nameof(SecurityControlsTests.CredentialConcurrencyRejectsBeforePasswordHashing), SecurityControlsTests.CredentialConcurrencyRejectsBeforePasswordHashing),
+    (nameof(SecurityControlsTests.SecurityLogsAreSampledAndNeverContainCredentialsOrTokens), SecurityControlsTests.SecurityLogsAreSampledAndNeverContainCredentialsOrTokens),
+    (nameof(SecurityControlsTests.InvalidSecuritySettingsFailStartup), SecurityControlsTests.InvalidSecuritySettingsFailStartup),
+
     (nameof(RefreshTokenRetentionTests.OnlyRecordsExpiredForAtLeastNinetyDaysAreEligible), RefreshTokenRetentionTests.OnlyRecordsExpiredForAtLeastNinetyDaysAreEligible),
     (nameof(RefreshTokenRetentionTests.NewerFamilyRecordsPreserveOlderReplayEvidence), RefreshTokenRetentionTests.NewerFamilyRecordsPreserveOlderReplayEvidence),
     (nameof(RefreshTokenRetentionTests.BatchesAreBoundedResumableAndIdempotent), RefreshTokenRetentionTests.BatchesAreBoundedResumableAndIdempotent),

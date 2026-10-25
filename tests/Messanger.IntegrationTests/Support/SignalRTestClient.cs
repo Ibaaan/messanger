@@ -8,6 +8,8 @@ namespace Messanger.IntegrationTests.Support;
 
 internal sealed class SignalRTestClient : IAsyncDisposable
 {
+    private readonly TaskCompletionSource disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public Task Disconnected => disconnected.Task;
     public HubConnection Connection { get; }
     public Channel<MessageResponse> Messages { get; } = Channel.CreateUnbounded<MessageResponse>();
     public Channel<long> RevokedChats { get; } = Channel.CreateUnbounded<long>();
@@ -24,6 +26,7 @@ internal sealed class SignalRTestClient : IAsyncDisposable
             options.AccessTokenProvider = () => Task.FromResult<string?>(token);
             options.Headers["Origin"] = ApiTestHost.AllowedOrigin;
         }).Build();
+        Connection.Closed += _ => { disconnected.TrySetResult(); return Task.CompletedTask; };
         Connection.On<MessageResponse>("ReceiveMessage", message => Messages.Writer.TryWrite(message));
         Connection.On<ChatUpdateResponse>("ChatUpdated", update => Updates.Writer.TryWrite(update));
         Connection.On<ChatResponse>("ChatCreated", chat => Chats.Writer.TryWrite(chat));

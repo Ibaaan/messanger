@@ -1,14 +1,25 @@
+using Messanger.Security;
+using Microsoft.Extensions.Options;
+
 namespace Messanger.Realtime;
 
 // Single-instance connection closure, including connections which have not joined any chat.
-internal sealed class AccountConnections
+internal sealed class AccountConnections(IOptions<SecurityLimitsOptions> settings)
 {
     private readonly object gate = new();
     private readonly Dictionary<string, (long UserId, int SessionVersion, Guid FamilyId, Action Abort)> connections = new();
 
-    public void Connect(string connectionId, long userId, int sessionVersion, Guid familyId, Action abort)
+    public bool TryConnect(string connectionId, long userId, int sessionVersion, Guid familyId, Action abort)
     {
-        lock (gate) connections[connectionId] = (userId, sessionVersion, familyId, abort);
+        lock (gate)
+        {
+            if (connections.ContainsKey(connectionId)) return true;
+            var limits = settings.Value;
+            if (limits.Enabled && (connections.Count >= limits.MaximumConnections ||
+                connections.Values.Count(connection => connection.UserId == userId) >= limits.MaximumConnectionsPerUser)) return false;
+            connections[connectionId] = (userId, sessionVersion, familyId, abort);
+            return true;
+        }
     }
 
     public void Disconnect(string connectionId)

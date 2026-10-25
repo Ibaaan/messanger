@@ -1,4 +1,3 @@
-using Messanger.Security;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -7,6 +6,7 @@ using Messanger.Authentication;
 using Messanger.Application;
 using Messanger.Application.Authentication;
 using Messanger.Http;
+using Messanger.Security;
 using Messanger.Infrastructure.Authentication;
 using Messanger.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -29,14 +29,20 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
     private readonly string connectionString;
     private readonly string environment;
     private readonly TimeProvider? clock;
+    private readonly Action<SecurityLimitsOptions>? security;
+    private readonly ILoggerProvider? securityLogs;
+    private readonly Action<IServiceCollection>? overrides;
     private readonly string keyDirectory;
     private readonly string schema;
 
-    private ApiTestHost(string adminConnectionString, string environment, TimeProvider? clock)
+    private ApiTestHost(string adminConnectionString, string environment, TimeProvider? clock, Action<SecurityLimitsOptions>? security, ILoggerProvider? securityLogs, Action<IServiceCollection>? overrides)
     {
         this.adminConnectionString = adminConnectionString;
         this.environment = environment;
         this.clock = clock;
+        this.security = security;
+        this.securityLogs = securityLogs;
+        this.overrides = overrides;
         schema = "api_tests_" + Guid.NewGuid().ToString("N");
         connectionString = new NpgsqlConnectionStringBuilder(adminConnectionString) { SearchPath = schema }
             .ConnectionString;
@@ -47,9 +53,9 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
     public RSA SigningKey { get; } = RSA.Create(2048);
     public HttpClient Client { get; private set; } = null!;
 
-    public static async Task<ApiTestHost> CreateAsync(string connectionString, string environment = "Development", TimeProvider? clock = null)
+    public static async Task<ApiTestHost> CreateAsync(string connectionString, string environment = "Development", TimeProvider? clock = null, Action<SecurityLimitsOptions>? security = null, ILoggerProvider? securityLogs = null, Action<IServiceCollection>? overrides = null)
     {
-        var host = new ApiTestHost(connectionString, environment, clock);
+        var host = new ApiTestHost(connectionString, environment, clock, security, securityLogs, overrides);
         try
         {
             await using var connection = new NpgsqlConnection(connectionString);
@@ -80,12 +86,17 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(environment);
-        builder.ConfigureLogging(logging => logging.ClearProviders());
+        builder.ConfigureLogging(logging => { logging.ClearProviders(); if (securityLogs is not null) logging.AddProvider(securityLogs); });
         builder.ConfigureServices(services =>
         {
             // All request scopes use the isolated schema, never the caller's application tables.
             if (clock is not null) { services.RemoveAll<TimeProvider>(); services.AddSingleton(clock); }
-            services.PostConfigure<SecurityLimitsOptions>(options => options.Enabled = false);
+            services.PostConfigure<SecurityLimitsOptions>(options =>
+            {
+                if (security is null) options.Enabled = false;
+                else { options.Enabled = true; security(options); }
+            });
+            if (security is not null) services.AddSingleton<IStartupFilter, TestPeerAddress>();
             // Retention scenarios run explicit passes; normal API tests must not race a background purge.
             services.PostConfigure<RefreshTokenCleanupOptions>(options => options.Enabled = false);
             services.RemoveAll<NpgsqlDataSource>();
@@ -97,8 +108,12 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
                 options.PrivateKeyPath = Path.Combine(keyDirectory, "signing.pem");
             });
             services.PostConfigure<HttpSecurityOptions>(options => options.AllowedOrigins = [AllowedOrigin]);
+            overrides?.Invoke(services);
         });
     }
+
+    public Task<ApiTestHost> CreateSecurityHostAsync(Action<SecurityLimitsOptions> options, ILoggerProvider? logs = null, Action<IServiceCollection>? overrides = null) =>
+        CreateAsync(adminConnectionString, security: options, securityLogs: logs, overrides: overrides);
 
     public Task<ApiTestHost> CreateClockHostAsync(TimeProvider clock) => CreateAsync(adminConnectionString, clock: clock);
 

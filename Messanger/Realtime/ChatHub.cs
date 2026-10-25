@@ -1,4 +1,5 @@
 using System.Globalization;
+using Messanger.Security;
 using Messanger.Application;
 using Messanger.Application.Chats;
 using Messanger.Application.Messages;
@@ -12,16 +13,23 @@ namespace Messanger.Realtime;
 
 [Authorize]
 internal sealed class ChatHub(ChatAccessService access, MessageService messages,
-    ChatReadService reads, ChatBroadcaster broadcaster, ChatSubscriptions subscriptions, AccountConnections connections, AccountSession session) : Hub
+    ChatReadService reads, ChatBroadcaster broadcaster, ChatSubscriptions subscriptions, AccountConnections connections, AccountSession session, SecurityBudgets budgets, SecurityAudit audit) : Hub
 {
     private long UserId => ChatEndpoints.UserId(Context.User!);
 
     public override async Task OnConnectedAsync()
     {
         await access.RequireActiveAsync(UserId, Context.ConnectionAborted);
-        connections.Connect(Context.ConnectionId, UserId, int.Parse(Context.User!.FindFirst("session_version")!.Value, CultureInfo.InvariantCulture), Guid.Parse(Context.User.FindFirst("sid")!.Value), Context.Abort);
         try
         {
+            using var attempt = budgets.Acquire("connections", SecurityBudgets.UserKey(UserId));
+            if (!attempt.IsAcquired || !connections.TryConnect(Context.ConnectionId, UserId,
+                int.Parse(Context.User!.FindFirst("session_version")!.Value, CultureInfo.InvariantCulture),
+                Guid.Parse(Context.User.FindFirst("sid")!.Value), Context.Abort))
+            {
+                audit.ConnectionRejected(Context.GetHttpContext(), UserId);
+                throw new HubException("connection_limit: Too many live connections. Try again later.");
+            }
             // Recheck after registration so a status change racing connection setup cannot escape revocation.
             if (!await session.IsCurrentAsync(Context.User!, Context.ConnectionAborted))
                 throw new UseCaseException("forbidden", "Your session is no longer active.");
