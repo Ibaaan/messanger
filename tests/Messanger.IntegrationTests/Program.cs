@@ -56,9 +56,11 @@ foreach (var (name, run) in workerTests)
 
 (string Name, Func<ApiTestHost, Task> Run)[] apiTests =
 [
+    (nameof(KeyRotationTests.PreviousPublicKeysValidateAccessAndRefreshDuringRotation), KeyRotationTests.PreviousPublicKeysValidateAccessAndRefreshDuringRotation),
     (nameof(OperationsTests.ReadinessDetectsPendingMigrationsAndRecovers), OperationsTests.ReadinessDetectsPendingMigrationsAndRecovers),
     (nameof(OperationsTests.DatabaseOutageDoesNotBreakLivenessOrExposeConnectionDetails), OperationsTests.DatabaseOutageDoesNotBreakLivenessOrExposeConnectionDetails),
     (nameof(OperationsTests.CorrelationAndMetricsAreSafeAndRequireACurrentAdministrator), OperationsTests.CorrelationAndMetricsAreSafeAndRequireACurrentAdministrator),
+    (nameof(OperationsTests.ProductionPersistsEncryptedProtectionKeysAndRequiresHttps), OperationsTests.ProductionPersistsEncryptedProtectionKeysAndRequiresHttps),
 
     (nameof(SecurityControlsTests.RegistrationLimitsUseTheRealPeerAndIgnoreUntrustedForwarders), SecurityControlsTests.RegistrationLimitsUseTheRealPeerAndIgnoreUntrustedForwarders),
     (nameof(SecurityControlsTests.LoginLimitsBothIpAndNormalizedAccountWithoutEnumeratingUsers), SecurityControlsTests.LoginLimitsBothIpAndNormalizedAccountWithoutEnumeratingUsers),

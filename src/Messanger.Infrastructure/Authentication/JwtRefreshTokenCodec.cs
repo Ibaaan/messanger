@@ -40,7 +40,7 @@ internal sealed class JwtRefreshTokenCodec(JwtSigningKey signingKey, IOptions<Jw
             {
                 ValidateIssuer = true, ValidIssuer = options.Value.Issuer,
                 ValidateAudience = true, ValidAudience = options.Value.Audience + ":refresh",
-                ValidateIssuerSigningKey = true, IssuerSigningKey = signingKey.Key,
+                ValidateIssuerSigningKey = true, IssuerSigningKeys = signingKey.ValidationKeys,
                 RequireSignedTokens = true, RequireExpirationTime = true,
                 ValidAlgorithms = [SecurityAlgorithms.RsaSha256], ValidTypes = ["rt+jwt"],
                 // Use the injected clock and strict family deadline, including in integration checks.

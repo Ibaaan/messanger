@@ -7,6 +7,8 @@ using Messanger.Application;
 using Messanger.Application.Authentication;
 using Messanger.Http;
 using Messanger.Security;
+using Messanger.Operations;
+using System.Security.Cryptography.X509Certificates;
 using Messanger.Infrastructure.Authentication;
 using Messanger.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -48,8 +50,12 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
             .ConnectionString;
         keyDirectory = Directory.CreateTempSubdirectory("messanger-api-tests-").FullName;
         File.WriteAllText(Path.Combine(keyDirectory, "signing.pem"), SigningKey.ExportPkcs8PrivateKeyPem());
+        var request = new CertificateRequest("CN=messanger-test", SigningKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1));
+        File.WriteAllBytes(Path.Combine(keyDirectory, "protection.pfx"), certificate.Export(X509ContentType.Pfx, "test-only"));
     }
 
+    public string ProtectionKeysPath => Path.Combine(keyDirectory, "protection-keys");
     public RSA SigningKey { get; } = RSA.Create(2048);
     public HttpClient Client { get; private set; } = null!;
 
@@ -86,6 +92,9 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(environment);
+        builder.UseSetting("DataProtection:KeysPath", ProtectionKeysPath);
+        builder.UseSetting("DataProtection:CertificatePath", Path.Combine(keyDirectory, "protection.pfx"));
+        builder.UseSetting("DataProtection:CertificatePassword", "test-only");
         builder.ConfigureLogging(logging => { logging.ClearProviders(); if (securityLogs is not null) logging.AddProvider(securityLogs); });
         builder.ConfigureServices(services =>
         {
@@ -108,6 +117,12 @@ internal sealed class ApiTestHost : WebApplicationFactory<Program>
                 options.PrivateKeyPath = Path.Combine(keyDirectory, "signing.pem");
             });
             services.PostConfigure<HttpSecurityOptions>(options => options.AllowedOrigins = [AllowedOrigin]);
+            services.PostConfigure<ProtectionStorageOptions>(options =>
+            {
+                options.KeysPath = ProtectionKeysPath;
+                options.CertificatePath = Path.Combine(keyDirectory, "protection.pfx");
+                options.CertificatePassword = "test-only";
+            });
             overrides?.Invoke(services);
         });
     }

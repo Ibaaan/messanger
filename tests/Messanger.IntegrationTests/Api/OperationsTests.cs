@@ -75,4 +75,19 @@ internal static class OperationsTests
         TestAssert.True(!entries.Contains("private_query_marker") && !entries.Contains("private_client_correlation") && !entries.Contains("do_not_log"), "Structured request logs omit raw paths/queries and client correlation data.");
     }
 
+    public static async Task ProductionPersistsEncryptedProtectionKeysAndRequiresHttps(ApiTestHost host)
+    {
+        await using var production = await host.CreateProductionHostAsync();
+        using var live = await production.Client.GetAsync("/health/live");
+        live.EnsureSuccessStatusCode();
+        using var insecure = await production.Client.GetAsync("http://localhost/health/live");
+        await ApiAssertions.ErrorAsync(insecure, HttpStatusCode.BadRequest, "https_required");
+        var files = Directory.GetFiles(production.ProtectionKeysPath, "key-*.xml");
+        TestAssert.True(files.Length > 0, "Persist keys outside the container's ephemeral filesystem.");
+        foreach (var file in files)
+        {
+            var xml = await File.ReadAllTextAsync(file);
+            TestAssert.True(xml.Contains("encryptedSecret") && !xml.Contains("<masterKey"), "Protect stored key material with the configured certificate.");
+        }
+    }
 }

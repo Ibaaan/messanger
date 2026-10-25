@@ -32,7 +32,7 @@ internal static class AuthenticationRegistration
                     ValidateAudience = true,
                     ValidAudience = settings.Value.Audience,
                     ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = key.ValidationKey,
+                    IssuerSigningKeys = key.ValidationKeys,
                     RequireSignedTokens = true,
                     RequireExpirationTime = true,
                     ValidateLifetime = true,

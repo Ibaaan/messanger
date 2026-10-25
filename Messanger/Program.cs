@@ -23,6 +23,7 @@ public sealed class Program
                                ?? throw new InvalidOperationException(
                                    "ConnectionStrings:Postgres is required. See README.md.");
 
+        builder.Services.AddProtectionStorage(builder.Configuration, builder.Environment.IsDevelopment());
         builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 16 * 1024);
         builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
         builder.Services.Configure<JsonOptions>(options => options.SerializerOptions.MaxDepth = 32);
@@ -49,6 +50,7 @@ public sealed class Program
         var app = builder.Build();
         // Fail startup on an invalid/missing signing key rather than the first login request.
         app.Services.GetRequiredService<JwtSigningKey>();
+        _ = app.Services.GetRequiredService<ProtectionCertificates>().Active;
         app.UseRouting();
         app.UseMiddleware<RequestObservabilityMiddleware>();
         app.UseExceptionHandler();

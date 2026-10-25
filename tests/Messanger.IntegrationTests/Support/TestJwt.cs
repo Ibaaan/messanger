@@ -8,7 +8,7 @@ namespace Messanger.IntegrationTests.Support;
 internal static class TestJwt
 {
     public static string Create(ApiTestHost host, long userId, Action<JwtPayload>? change = null,
-        string algorithm = SecurityAlgorithms.RsaSha256, string type = "at+jwt", bool wrongKey = false)
+        string algorithm = SecurityAlgorithms.RsaSha256, string type = "at+jwt", bool wrongKey = false, RSA? signingKey = null)
     {
         var now = DateTimeOffset.UtcNow;
         var payload = new JwtPayload
@@ -29,7 +29,7 @@ internal static class TestJwt
         using var otherKey = RSA.Create(2048);
         SecurityKey key = algorithm == SecurityAlgorithms.HmacSha256
             ? new SymmetricSecurityKey(RandomNumberGenerator.GetBytes(64))
-            : new RsaSecurityKey(wrongKey ? otherKey : host.SigningKey);
+            : new RsaSecurityKey(signingKey ?? (wrongKey ? otherKey : host.SigningKey));
         var credentials = algorithm == SecurityAlgorithms.None ? null : new SigningCredentials(key, algorithm);
         var header = new JwtHeader(credentials) { ["typ"] = type };
         return new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(header, payload));
