@@ -1,5 +1,5 @@
-using Messanger.Operations;
 using Messanger.Security;
+using Messanger.Operations;
 using Messanger.Accounts;
 using Messanger.Application.Accounts;
 using Messanger.Authentication;
@@ -16,13 +16,18 @@ namespace Messanger;
 
 public sealed class Program
 {
-    public static async Task Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
-        var builder = WebApplication.CreateBuilder(args);
+        var command = args.Length == 1 && args[0] is "--migrate" or "--healthcheck" ? args[0] : null;
+        var builder = WebApplication.CreateBuilder(command is null ? args : []);
+        if (Environment.GetEnvironmentVariable("MESSANGER_CONFIG_FILE") is { Length: > 0 } configFile)
+            builder.Configuration.AddJsonFile(configFile, optional: false, reloadOnChange: false).AddEnvironmentVariables();
+        if (command == "--healthcheck") return await OperationalCommands.HealthAsync(builder.Configuration);
         var connectionString = builder.Configuration.GetConnectionString("Postgres")
                                ?? throw new InvalidOperationException(
                                    "ConnectionStrings:Postgres is required. See README.md.");
 
+        if (command == "--migrate") return await OperationalCommands.MigrateAsync(connectionString, builder.Configuration);
         builder.Services.AddProtectionStorage(builder.Configuration, builder.Environment.IsDevelopment());
         builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 16 * 1024);
         builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
@@ -75,5 +80,6 @@ public sealed class Program
         if (app.Environment.IsDevelopment()) app.MapOpenApi().AllowAnonymous();
         app.MapChatRealtime();
         await app.RunAsync();
+        return 0;
     }
 }
