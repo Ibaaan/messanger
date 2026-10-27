@@ -1,0 +1,10 @@
+.git
+**/bin
+**/obj
+.local
+.env
+_docs
+.idea
+**/*.pgdump
+**/*.cms
+**/secrets
