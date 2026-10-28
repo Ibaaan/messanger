@@ -9,3 +9,7 @@ _docs/
 .env
 
 .local/
+
+__pycache__/
+*.pgdump
+*.cms
