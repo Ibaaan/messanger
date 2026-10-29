@@ -1,0 +1,28 @@
+name: verify
+on: [push, pull_request]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env: { POSTGRES_DB: messanger, POSTGRES_USER: messanger, POSTGRES_PASSWORD: integration_only }
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U messanger" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      ConnectionStrings__Postgres: Host=localhost;Port=5432;Database=messanger;Username=messanger;Password=integration_only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '10.0.x' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: dotnet restore Messanger.sln
+      - run: dotnet build Messanger.sln --no-restore
+      - run: dotnet tool restore
+      - run: dotnet ef database update --project src/Messanger.Infrastructure --no-build
+      - run: dotnet ef migrations has-pending-model-changes --project src/Messanger.Infrastructure --no-build
+      - run: dotnet run --project tests/Messanger.IntegrationTests --no-build
+      - run: node tests/browser/session.test.cjs && node tests/browser/read.test.cjs && node tests/browser/password.test.cjs
+      - run: docker build -t messanger:local .
+      - run: python3 deploy/smoke.py
