@@ -474,3 +474,7 @@ Add a schema migration with:
 ```bash
 dotnet ef migrations add MigrationName --project src/Messanger.Infrastructure
 ```
+
+## Production operations
+
+See [deployment and recovery](deploy/README.md) for the HTTPS app/PostgreSQL stack, separate migration credentials, persistent encrypted session keys, health probes, administrator metrics, limits, key rotation, CI, and encrypted backup/restore drills. Production setup requires explicit secrets and certificates. Rate limits and connection quotas are enabled by default; see `Messanger/Security/SecurityLimitsOptions.cs` for configurable budgets.
