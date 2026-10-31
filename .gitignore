@@ -15,6 +15,5 @@ __pycache__/
 *.cms
 
 /_doc/
-/deploy/
 
 *.DotSettings.user

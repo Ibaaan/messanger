@@ -1,0 +1,101 @@
+name: ${COMPOSE_PROJECT_NAME:-messanger-production}
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/admin_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    entrypoint: ["/bin/bash", "/opt/messanger/postgres-tls.sh"]
+    secrets: [admin_password, owner_password, app_password, db_key, db_cert]
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./postgres-tls.sh:/opt/messanger/postgres-tls.sh:ro
+      - ./roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+      - ./pg_hba.conf:/etc/postgresql/messanger_hba.conf:ro
+    tmpfs: [/tmp, /var/run/postgresql, /run/postgres-tls]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d messanger"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    networks: [database]
+  prepare:
+    image: ${MESSANGER_IMAGE:-messanger:local}
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-ec", "chown 1654:1654 /var/lib/messanger/keys && chmod 700 /var/lib/messanger/keys"]
+    volumes: [protection_keys:/var/lib/messanger/keys]
+    network_mode: none
+  migrate:
+    image: ${MESSANGER_IMAGE:-messanger:local}
+    build: { context: .., dockerfile: Dockerfile }
+    command: ["--migrate"]
+    environment: { MESSANGER_CONFIG_FILE: /run/secrets/config, ASPNETCORE_ENVIRONMENT: Production }
+    secrets:
+      - { source: migration_config, target: config }
+      - ca_cert
+    depends_on: { postgres: { condition: service_healthy } }
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [database]
+  app:
+    image: ${MESSANGER_IMAGE:-messanger:local}
+    build: { context: .., dockerfile: Dockerfile }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      MESSANGER_CONFIG_FILE: /run/secrets/config
+      SSL_CERT_FILE: /run/secrets/ca_cert
+    secrets:
+      - { source: runtime_config, target: config }
+      - jwt_key
+      - tls_pfx
+      - dp_pfx
+      - ca_cert
+    ports: ["127.0.0.1:${MESSANGER_HTTPS_PORT:-7443}:8443"]
+    volumes: [protection_keys:/var/lib/messanger/keys]
+    depends_on:
+      postgres: { condition: service_healthy }
+      prepare: { condition: service_completed_successfully }
+      migrate: { condition: service_completed_successfully }
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "dotnet", "Messanger.dll", "--healthcheck"]
+      interval: 10s
+      timeout: 8s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+    networks: [edge, database]
+  backup:
+    image: postgres:18
+    profiles: [tools]
+    entrypoint: []
+    volumes: [protection_keys:/keys]
+    network_mode: none
+    security_opt: [no-new-privileges:true]
+secrets:
+  admin_password: { file: "${MESSANGER_SECRETS_DIR:?Set MESSANGER_SECRETS_DIR}/admin_password" }
+  owner_password: { file: "${MESSANGER_SECRETS_DIR}/owner_password" }
+  app_password: { file: "${MESSANGER_SECRETS_DIR}/app_password" }
+  db_key: { file: "${MESSANGER_SECRETS_DIR}/db.key" }
+  db_cert: { file: "${MESSANGER_SECRETS_DIR}/db.crt" }
+  ca_cert: { file: "${MESSANGER_SECRETS_DIR}/ca.crt" }
+  jwt_key: { file: "${MESSANGER_SECRETS_DIR}/jwt.pem" }
+  tls_pfx: { file: "${MESSANGER_SECRETS_DIR}/app.pfx" }
+  dp_pfx: { file: "${MESSANGER_SECRETS_DIR}/dp.pfx" }
+  runtime_config: { file: "${MESSANGER_SECRETS_DIR}/runtime.json" }
+  migration_config: { file: "${MESSANGER_SECRETS_DIR}/migration.json" }
+volumes: { postgres_data: {}, protection_keys: {} }
+networks:
+  edge: {}
+  database: { internal: true }
