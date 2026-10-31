@@ -13,3 +13,6 @@ _docs/
 __pycache__/
 *.pgdump
 *.cms
+
+/_doc/
+/deploy/
